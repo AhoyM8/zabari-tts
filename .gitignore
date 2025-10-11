@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+neutts-air/.venv/
+neutts-air/venv/
+
+# Build outputs
+frontend/.next/
+frontend/out/
+frontend/build/
+dist/
+
+# Audio outputs
+audio_output/
+*.wav
+*.mp3
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Dynamic config
+dynamic-config.json
+chat-logger.pid
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+nul
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Playwright
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
