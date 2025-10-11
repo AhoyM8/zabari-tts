@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import TTSManager from './components/TTSManager'
 
 export default function Home() {
+  // TTS Manager ref for controlling TTS
+  const ttsManagerRef = useRef(null)
   // Chat platform states
   const [platforms, setPlatforms] = useState({
     twitch: { enabled: false, url: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=' },
@@ -150,11 +152,19 @@ export default function Home() {
     }))
   }
 
+  // Cancel all TTS
+  const cancelAllTTS = () => {
+    if (ttsManagerRef.current) {
+      ttsManagerRef.current.cancelAll()
+    }
+  }
+
   return (
     <main className="min-h-screen p-8">
       {/* TTS Manager for API mode - only active when using API connection */}
       {connectionMode === 'api' && isRunning && (
         <TTSManager
+          ref={ttsManagerRef}
           messages={messages}
           ttsConfig={ttsConfig}
           enabled={true}
@@ -606,7 +616,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Control Button */}
+            {/* Control Buttons */}
             <button
               onClick={toggleChatLogger}
               disabled={status === 'error'}
@@ -618,6 +628,19 @@ export default function Home() {
             >
               {isRunning ? 'Stop Chat Logger' : 'Start Chat Logger'}
             </button>
+
+            {/* Cancel TTS Button - Only show in API mode when running */}
+            {connectionMode === 'api' && isRunning && (
+              <button
+                onClick={cancelAllTTS}
+                className="w-full py-3 rounded-xl font-semibold text-base transition-all bg-orange-600 hover:bg-orange-700 flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                Cancel All TTS
+              </button>
+            )}
 
             {/* Status */}
             <div className={`text-center py-3 rounded-lg ${

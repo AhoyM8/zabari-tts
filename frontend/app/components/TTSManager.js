@@ -1,15 +1,29 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 
 /**
  * TTS Manager Component
  * Handles browser-based TTS for API mode
  */
-export default function TTSManager({ messages, ttsConfig, enabled }) {
+const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled }, ref) {
   const lastProcessedIndexRef = useRef(0)
   const messageQueueRef = useRef([])
   const isProcessingRef = useRef(false)
+
+  // Expose cancel function to parent component
+  useImperativeHandle(ref, () => ({
+    cancelAll: () => {
+      console.log('[TTS] Canceling all speech')
+      // Clear the queue
+      messageQueueRef.current = []
+      isProcessingRef.current = false
+      // Cancel any currently playing speech
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }))
 
   useEffect(() => {
     if (!enabled || !ttsConfig) {
@@ -206,4 +220,6 @@ export default function TTSManager({ messages, ttsConfig, enabled }) {
   }, [enabled])
 
   return null // This component doesn't render anything
-}
+})
+
+export default TTSManager
