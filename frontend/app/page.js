@@ -13,6 +13,10 @@ export default function Home() {
   // TTS engine selection
   const [ttsEngine, setTtsEngine] = useState('webspeech') // 'webspeech' or 'neutts'
 
+  // Connection mode selection
+  const [connectionMode, setConnectionMode] = useState('playwright') // 'playwright' or 'api'
+  const [youtubeApiKey, setYoutubeApiKey] = useState('') // For API mode YouTube
+
   // TTS configuration
   const [ttsConfig, setTtsConfig] = useState({
     volume: 1.0,
@@ -104,6 +108,8 @@ export default function Home() {
         const config = {
           platforms,
           ttsEngine,
+          connectionMode,
+          youtubeApiKey: connectionMode === 'api' ? youtubeApiKey : undefined,
           ttsConfig: ttsEngine === 'webspeech' ? ttsConfig : neuttsConfig
         }
 
@@ -278,6 +284,87 @@ export default function Home() {
 
           {/* Right Column - TTS Settings */}
           <div className="space-y-6">
+            {/* Connection Method Selection */}
+            <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+              <h2 className="text-2xl font-bold mb-6">Chat Connection Method</h2>
+
+              <div className="space-y-4">
+                {/* Playwright Mode */}
+                <button
+                  onClick={() => setConnectionMode('playwright')}
+                  className={`w-full p-4 rounded-lg border-2 transition-all ${
+                    connectionMode === 'playwright'
+                      ? 'border-green-500 bg-green-500/10'
+                      : 'border-gray-700 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <h3 className="font-semibold text-lg">Playwright (Browser Automation)</h3>
+                      <p className="text-sm text-gray-400">Local only - requires installed browsers</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 ${
+                      connectionMode === 'playwright' ? 'border-green-500 bg-green-500' : 'border-gray-600'
+                    }`}>
+                      {connectionMode === 'playwright' && (
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </button>
+
+                {/* API Mode */}
+                <button
+                  onClick={() => setConnectionMode('api')}
+                  className={`w-full p-4 rounded-lg border-2 transition-all ${
+                    connectionMode === 'api'
+                      ? 'border-blue-500 bg-blue-500/10'
+                      : 'border-gray-700 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <h3 className="font-semibold text-lg">Direct API Connection</h3>
+                      <p className="text-sm text-gray-400">Vercel-compatible - works everywhere</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 ${
+                      connectionMode === 'api' ? 'border-blue-500 bg-blue-500' : 'border-gray-600'
+                    }`}>
+                      {connectionMode === 'api' && (
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* API Mode Config */}
+              {connectionMode === 'api' && platforms.youtube?.enabled && (
+                <div className="mt-6 space-y-4 p-4 bg-gray-800 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">YouTube API Key (Optional)</label>
+                    <input
+                      type="password"
+                      value={youtubeApiKey}
+                      onChange={(e) => setYoutubeApiKey(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      placeholder="Get from Google Cloud Console"
+                    />
+                    <p className="mt-2 text-xs text-gray-500">
+                      Required for YouTube in API mode. Get your key at{' '}
+                      <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                        console.cloud.google.com
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* TTS Engine Selection */}
             <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
               <h2 className="text-2xl font-bold mb-6">TTS Engine</h2>

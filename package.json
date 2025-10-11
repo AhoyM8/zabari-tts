@@ -12,6 +12,8 @@
   "type": "commonjs",
   "dependencies": {
     "@playwright/test": "^1.56.0",
-    "playwright": "^1.56.0"
+    "playwright": "^1.56.0",
+    "pusher-js": "^8.4.0",
+    "tmi.js": "^1.8.5"
   }
 }

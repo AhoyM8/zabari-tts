@@ -4,77 +4,29 @@ import path from 'path'
 import fs from 'fs'
 import { addMessage, clearMessages } from '../messages/route.js'
 
-// Store the active process
+// Store active process (Playwright mode) or clients (API mode)
 let chatProcess = null
+let apiClients = null
 
 export async function POST(request) {
   try {
     const config = await request.json()
-
-    // If already running, stop it first
-    if (chatProcess) {
-      chatProcess.kill()
-      chatProcess = null
-    }
+    const { connectionMode = 'playwright' } = config
 
     // Clear old messages
     clearMessages()
 
-    // Create dynamic config file
-    const configPath = path.join(process.cwd(), '..', 'dynamic-config.json')
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
-
-    // Determine which script to run
-    const scriptName = config.ttsEngine === 'neutts'
-      ? 'chat-logger-tts.js'
-      : 'chat-logger-webspeech.js'
-
-    const scriptPath = path.join(process.cwd(), '..', scriptName)
-
-    // Start the chat logger process
-    chatProcess = spawn('node', [scriptPath], {
-      cwd: path.join(process.cwd(), '..'),
-      env: {
-        ...process.env,
-        ZABARI_CONFIG: configPath
-      }
-    })
-
-    chatProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      console.log(`[Chat Logger]: ${output}`)
-
-      // Parse chat messages (format: PLATFORM:username:message)
-      const lines = output.split('\n');
-      lines.forEach(line => {
-        // Match lines that contain PLATFORM:username:message pattern
-        const match = line.match(/(TWITCH|YOUTUBE|KICK):([^:]+):(.+)$/);
-        if (match) {
-          const [, platform, username, message] = match;
-          console.log(`[MATCHED MESSAGE] Platform: ${platform}, User: ${username}, Message: ${message}`);
-          addMessage({
-            platform: platform.toLowerCase(),
-            username: username.trim(),
-            message: message.trim()
-          });
-        }
-      });
-    })
-
-    chatProcess.stderr.on('data', (data) => {
-      console.error(`[Chat Logger Error]: ${data.toString()}`)
-    })
-
-    chatProcess.on('close', (code) => {
-      console.log(`Chat logger process exited with code ${code}`)
-      chatProcess = null
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: 'Chat logger started',
-      engine: config.ttsEngine
-    })
+    // Handle based on connection mode
+    if (connectionMode === 'playwright') {
+      return await startPlaywrightMode(config)
+    } else if (connectionMode === 'api') {
+      return await startApiMode(config)
+    } else {
+      return NextResponse.json({
+        success: false,
+        error: `Unknown connection mode: ${connectionMode}`
+      }, { status: 400 })
+    }
 
   } catch (error) {
     console.error('Error starting chat logger:', error)
@@ -83,4 +35,153 @@ export async function POST(request) {
       error: error.message
     }, { status: 500 })
   }
+}
+
+/**
+ * Start Playwright mode (existing functionality)
+ */
+async function startPlaywrightMode(config) {
+  // If already running, stop it first
+  if (chatProcess) {
+    chatProcess.kill()
+    chatProcess = null
+  }
+
+  // Create dynamic config file
+  const configPath = path.join(process.cwd(), '..', 'dynamic-config.json')
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+
+  // Determine which script to run
+  const scriptName = config.ttsEngine === 'neutts'
+    ? 'chat-logger-tts.js'
+    : 'chat-logger-webspeech.js'
+
+  const scriptPath = path.join(process.cwd(), '..', scriptName)
+
+  // Start the chat logger process
+  chatProcess = spawn('node', [scriptPath], {
+    cwd: path.join(process.cwd(), '..'),
+    env: {
+      ...process.env,
+      ZABARI_CONFIG: configPath
+    }
+  })
+
+  chatProcess.stdout.on('data', (data) => {
+    const output = data.toString();
+    console.log(`[Chat Logger]: ${output}`)
+
+    // Parse chat messages (format: PLATFORM:username:message)
+    const lines = output.split('\n');
+    lines.forEach(line => {
+      // Match lines that contain PLATFORM:username:message pattern
+      const match = line.match(/(TWITCH|YOUTUBE|KICK):([^:]+):(.+)$/);
+      if (match) {
+        const [, platform, username, message] = match;
+        console.log(`[MATCHED MESSAGE] Platform: ${platform}, User: ${username}, Message: ${message}`);
+        addMessage({
+          platform: platform.toLowerCase(),
+          username: username.trim(),
+          message: message.trim()
+        });
+      }
+    });
+  })
+
+  chatProcess.stderr.on('data', (data) => {
+    console.error(`[Chat Logger Error]: ${data.toString()}`)
+  })
+
+  chatProcess.on('close', (code) => {
+    console.log(`Chat logger process exited with code ${code}`)
+    chatProcess = null
+  })
+
+  return NextResponse.json({
+    success: true,
+    message: 'Chat logger started (Playwright mode)',
+    mode: 'playwright',
+    engine: config.ttsEngine
+  })
+}
+
+/**
+ * Start API mode (new functionality)
+ */
+async function startApiMode(config) {
+  try {
+    // Dynamically import the chat API module
+    const chatApiModule = await import('../../../../../lib/chat-api/index.js')
+    const { initializeChatClients, disconnectAll } = chatApiModule
+
+    // Disconnect existing clients if any
+    if (apiClients) {
+      await disconnectAll()
+      apiClients = null
+    }
+
+    // Initialize chat clients
+    apiClients = await initializeChatClients({
+      platforms: config.platforms,
+      ttsConfig: config.ttsConfig,
+      youtubeApiKey: config.youtubeApiKey,
+      onMessage: (platform, username, message) => {
+        console.log(`[API MODE] ${platform.toUpperCase()}: ${username}: ${message}`)
+        // Message already added to buffer by initializeChatClients
+        // But we also add to the route's message buffer for consistency
+        addMessage({
+          platform,
+          username,
+          message
+        })
+      }
+    })
+
+    console.log(`Chat clients initialized in API mode. Active clients: ${apiClients.length}`)
+
+    return NextResponse.json({
+      success: true,
+      message: 'Chat clients started (API mode)',
+      mode: 'api',
+      clientsCount: apiClients.length
+    })
+
+  } catch (error) {
+    console.error('Error starting API mode:', error)
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    }, { status: 500 })
+  }
+}
+
+/**
+ * Get active process/clients (for status check)
+ */
+export function getActiveConnection() {
+  if (chatProcess) {
+    return { mode: 'playwright', active: true }
+  } else if (apiClients && apiClients.length > 0) {
+    return { mode: 'api', active: true, clientsCount: apiClients.length }
+  }
+  return { mode: null, active: false }
+}
+
+/**
+ * Stop all connections
+ */
+export async function stopAll() {
+  if (chatProcess) {
+    chatProcess.kill()
+    chatProcess = null
+  }
+
+  if (apiClients) {
+    const chatApiModule = await import('../../../../../lib/chat-api/index.js')
+    await chatApiModule.disconnectAll()
+    apiClients = null
+  }
+
+  clearMessages()
 }

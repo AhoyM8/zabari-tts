@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import { stopAll } from '../start/route.js'
 
 export async function POST() {
   try {
-    // Get the process from the start route
-    // Note: In production, you'd want to use a process manager or database
-    // For now, we'll create a PID file
+    // Use the stopAll function from start route (handles both modes)
+    await stopAll()
+
+    // Also try to stop via PID file (for Playwright mode fallback)
     const pidPath = path.join(process.cwd(), '..', 'chat-logger.pid')
 
     if (fs.existsSync(pidPath)) {
@@ -15,25 +17,20 @@ export async function POST() {
       try {
         process.kill(pid, 'SIGTERM')
         fs.unlinkSync(pidPath)
-
-        return NextResponse.json({
-          success: true,
-          message: 'Chat logger stopped'
-        })
       } catch (killError) {
         // Process might already be dead
-        fs.unlinkSync(pidPath)
-        return NextResponse.json({
-          success: true,
-          message: 'Chat logger was not running'
-        })
+        try {
+          fs.unlinkSync(pidPath)
+        } catch (e) {
+          // Ignore if file already deleted
+        }
       }
-    } else {
-      return NextResponse.json({
-        success: true,
-        message: 'No chat logger process found'
-      })
     }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Chat logger stopped'
+    })
 
   } catch (error) {
     console.error('Error stopping chat logger:', error)
