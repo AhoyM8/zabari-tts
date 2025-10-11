@@ -12,18 +12,34 @@ export default function TTSManager({ messages, ttsConfig, enabled }) {
   const isProcessingRef = useRef(false)
 
   useEffect(() => {
-    if (!enabled || !ttsConfig) return
+    if (!enabled || !ttsConfig) {
+      console.log('[TTS] Disabled or no config:', { enabled, hasConfig: !!ttsConfig })
+      return
+    }
 
     // Process new messages
     const newMessages = messages.slice(lastProcessedIndexRef.current)
 
     if (newMessages.length > 0) {
+      console.log(`[TTS] Processing ${newMessages.length} new messages with config:`, {
+        announceUsername: ttsConfig.announceUsername,
+        volume: ttsConfig.volume,
+        rate: ttsConfig.rate,
+        pitch: ttsConfig.pitch
+      })
+
       // Add new messages to queue
       newMessages.forEach(msg => {
         const textToSpeak = ttsConfig.announceUsername
           ? `${msg.username} says: ${msg.message}`
           : msg.message
 
+        console.log(`[TTS] Queuing message from ${msg.platform}:`, {
+          username: msg.username,
+          message: msg.message,
+          textToSpeak,
+          announceUsername: ttsConfig.announceUsername
+        })
         messageQueueRef.current.push(textToSpeak)
       })
 
@@ -31,6 +47,7 @@ export default function TTSManager({ messages, ttsConfig, enabled }) {
 
       // Start processing queue if not already processing
       if (!isProcessingRef.current) {
+        console.log('[TTS] Starting queue processing')
         processQueue()
       }
     }
@@ -51,15 +68,27 @@ export default function TTSManager({ messages, ttsConfig, enabled }) {
       console.error('TTS error:', error)
     }
 
-    // Small delay between messages
-    setTimeout(() => processQueue(), 100)
+    // Delay between messages to prevent overlap
+    setTimeout(() => processQueue(), 500)
   }
 
   const speak = (text, config) => {
     return new Promise((resolve) => {
       if (!window.speechSynthesis) {
-        console.error('Speech synthesis not available')
+        console.error('[TTS] Speech synthesis not available')
         resolve()
+        return
+      }
+
+      console.log(`[TTS] Speaking: "${text}"`)
+
+      // WORKAROUND 1: Ensure voices are loaded first
+      const voices = window.speechSynthesis.getVoices()
+      if (voices.length === 0) {
+        console.warn('[TTS] No voices loaded yet, waiting...')
+        // Try to trigger voice loading
+        window.speechSynthesis.getVoices()
+        setTimeout(() => speak(text, config).then(resolve), 100)
         return
       }
 
@@ -68,23 +97,76 @@ export default function TTSManager({ messages, ttsConfig, enabled }) {
       utterance.rate = config.rate || 1.0
       utterance.pitch = config.pitch || 1.0
 
+      // WORKAROUND 2: Set language explicitly
+      utterance.lang = 'en-US'
+
       // Try to find the requested voice
-      const voices = window.speechSynthesis.getVoices()
       const selectedVoice = voices.find(v => v.name === config.voice)
 
       if (selectedVoice) {
         utterance.voice = selectedVoice
-      } else if (voices.length > 0) {
-        utterance.voice = voices[0]
+        utterance.lang = selectedVoice.lang
+        console.log(`[TTS] Using selected voice: ${selectedVoice.name} (${selectedVoice.lang})`)
+      } else {
+        // Try to find an English voice
+        const englishVoice = voices.find(v => v.lang.startsWith('en'))
+        if (englishVoice) {
+          utterance.voice = englishVoice
+          utterance.lang = englishVoice.lang
+          console.log(`[TTS] Using English voice: ${englishVoice.name} (${englishVoice.lang})`)
+        } else if (voices.length > 0) {
+          utterance.voice = voices[0]
+          utterance.lang = voices[0].lang
+          console.log(`[TTS] Using first available voice: ${voices[0].name} (${voices[0].lang})`)
+        }
       }
 
-      utterance.onend = () => resolve()
+      let resolved = false
+
+      utterance.onstart = () => {
+        console.log('[TTS] Started speaking')
+      }
+
+      utterance.onend = () => {
+        console.log('[TTS] Finished speaking')
+        if (!resolved) {
+          resolved = true
+          resolve()
+        }
+      }
+
       utterance.onerror = (error) => {
-        console.error('Speech synthesis error:', error)
-        resolve()
+        console.error('[TTS] Speech synthesis error:', error)
+        if (!resolved) {
+          resolved = true
+          resolve()
+        }
+      }
+
+      // WORKAROUND 3: Resume speech synthesis (Chrome sometimes pauses it)
+      if (window.speechSynthesis.paused) {
+        console.log('[TTS] Speech synthesis was paused, resuming...')
+        window.speechSynthesis.resume()
       }
 
       window.speechSynthesis.speak(utterance)
+
+      // WORKAROUND 4: Force resume after a short delay (Chrome bug)
+      setTimeout(() => {
+        if (window.speechSynthesis.paused) {
+          console.log('[TTS] Force resuming speech synthesis')
+          window.speechSynthesis.resume()
+        }
+      }, 100)
+
+      // WORKAROUND 5: Safety timeout in case onend never fires
+      setTimeout(() => {
+        if (!resolved) {
+          console.warn('[TTS] Speech timeout, forcing completion')
+          resolved = true
+          resolve()
+        }
+      }, 30000) // 30 second timeout
     })
   }
 
@@ -101,14 +183,27 @@ export default function TTSManager({ messages, ttsConfig, enabled }) {
     }
   }, [])
 
-  // Cleanup on unmount
+  // Cleanup on unmount or when disabled
   useEffect(() => {
     return () => {
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel()
       }
+      messageQueueRef.current = []
+      isProcessingRef.current = false
     }
   }, [])
+
+  // Clear queue when disabled
+  useEffect(() => {
+    if (!enabled) {
+      messageQueueRef.current = []
+      isProcessingRef.current = false
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [enabled])
 
   return null // This component doesn't render anything
 }
