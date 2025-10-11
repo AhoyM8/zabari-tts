@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import TTSManager from './components/TTSManager'
 
 export default function Home() {
   // Chat platform states
@@ -151,6 +152,15 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-8">
+      {/* TTS Manager for API mode - only active when using API connection */}
+      {connectionMode === 'api' && isRunning && (
+        <TTSManager
+          messages={messages}
+          ttsConfig={ttsConfig}
+          enabled={true}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <header className="mb-12 text-center">
@@ -343,24 +353,35 @@ export default function Home() {
               </div>
 
               {/* API Mode Config */}
-              {connectionMode === 'api' && platforms.youtube?.enabled && (
+              {connectionMode === 'api' && (
                 <div className="mt-6 space-y-4 p-4 bg-gray-800 rounded-lg">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">YouTube API Key (Optional)</label>
-                    <input
-                      type="password"
-                      value={youtubeApiKey}
-                      onChange={(e) => setYoutubeApiKey(e.target.value)}
-                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
-                      placeholder="Get from Google Cloud Console"
-                    />
-                    <p className="mt-2 text-xs text-gray-500">
-                      Required for YouTube in API mode. Get your key at{' '}
-                      <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                        console.cloud.google.com
-                      </a>
-                    </p>
+                  <div className="flex items-start gap-2 text-sm text-blue-400 mb-4">
+                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
+                    </svg>
+                    <div>
+                      <strong>API Mode TTS:</strong> Uses browser Web Speech API for text-to-speech. NeuTTS is not supported in API mode.
+                    </div>
                   </div>
+
+                  {platforms.youtube?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2">YouTube API Key (Optional)</label>
+                      <input
+                        type="password"
+                        value={youtubeApiKey}
+                        onChange={(e) => setYoutubeApiKey(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                        placeholder="Get from Google Cloud Console"
+                      />
+                      <p className="mt-2 text-xs text-gray-500">
+                        Required for YouTube in API mode. Get your key at{' '}
+                        <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                          console.cloud.google.com
+                        </a>
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
