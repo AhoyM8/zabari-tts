@@ -111,7 +111,7 @@ async function startPlaywrightMode(config) {
 async function startApiMode(config) {
   try {
     // Dynamically import the chat API module
-    const chatApiModule = await import('../../../../../lib/chat-api/index.js')
+    const chatApiModule = await import('../../../../lib/chat-api/index.js')
     const { initializeChatClients, disconnectAll } = chatApiModule
 
     // Disconnect existing clients if any
@@ -178,7 +178,7 @@ export async function stopAll() {
   }
 
   if (apiClients) {
-    const chatApiModule = await import('../../../../../lib/chat-api/index.js')
+    const chatApiModule = await import('../../../../lib/chat-api/index.js')
     await chatApiModule.disconnectAll()
     apiClients = null
   }
