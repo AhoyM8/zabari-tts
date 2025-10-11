@@ -10,6 +10,7 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
   const lastProcessedIndexRef = useRef(0)
   const messageQueueRef = useRef([])
   const isProcessingRef = useRef(false)
+  const queueTimerRef = useRef(null) // Track setTimeout for cancellation
 
   // Expose cancel function to parent component
   useImperativeHandle(ref, () => ({
@@ -18,10 +19,17 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
       // Clear the queue
       messageQueueRef.current = []
       isProcessingRef.current = false
+      // Cancel pending timer
+      if (queueTimerRef.current) {
+        clearTimeout(queueTimerRef.current)
+        queueTimerRef.current = null
+      }
       // Cancel any currently playing speech
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel()
       }
+      // Reset processed index to prevent reprocessing
+      lastProcessedIndexRef.current = messages.length
     }
   }))
 
@@ -68,6 +76,12 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
   }, [messages, enabled, ttsConfig])
 
   const processQueue = async () => {
+    // Clear any existing timer
+    if (queueTimerRef.current) {
+      clearTimeout(queueTimerRef.current)
+      queueTimerRef.current = null
+    }
+
     if (messageQueueRef.current.length === 0) {
       isProcessingRef.current = false
       return
@@ -83,7 +97,10 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
     }
 
     // Delay between messages to prevent overlap
-    setTimeout(() => processQueue(), 500)
+    queueTimerRef.current = setTimeout(() => {
+      queueTimerRef.current = null
+      processQueue()
+    }, 500)
   }
 
   const speak = (text, config) => {
@@ -200,6 +217,10 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
   // Cleanup on unmount or when disabled
   useEffect(() => {
     return () => {
+      if (queueTimerRef.current) {
+        clearTimeout(queueTimerRef.current)
+        queueTimerRef.current = null
+      }
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel()
       }
@@ -211,6 +232,10 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
   // Clear queue when disabled
   useEffect(() => {
     if (!enabled) {
+      if (queueTimerRef.current) {
+        clearTimeout(queueTimerRef.current)
+        queueTimerRef.current = null
+      }
       messageQueueRef.current = []
       isProcessingRef.current = false
       if (window.speechSynthesis) {

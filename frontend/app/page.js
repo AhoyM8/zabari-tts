@@ -18,7 +18,7 @@ export default function Home() {
 
   // Connection mode selection
   const [connectionMode, setConnectionMode] = useState('playwright') // 'playwright' or 'api'
-  const [youtubeApiKey, setYoutubeApiKey] = useState('AIzaSyB5gDHT9ukP1pdvkknpGVBQdJMtzfoQ6mE') // For API mode YouTube
+  const [youtubeApiKey, setYoutubeApiKey] = useState('') // For API mode YouTube
 
   // TTS configuration
   const [ttsConfig, setTtsConfig] = useState({

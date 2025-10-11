@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Speech API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        button {
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+        }
+        button:hover {
+            background: #4f46e5;
+        }
+        #log {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <h1>Web Speech API Direct Test</h1>
+    <p>This will help diagnose the TTS issue by testing the browser's speech synthesis directly.</p>
+
+    <button onclick="testSimple()">Test 1: Simple "test"</button>
+    <button onclick="testWithUsername()">Test 2: "ahoy04 says: test"</button>
+    <button onclick="testYouTube()">Test 3: "Ahoy Galan says: dona"</button>
+    <button onclick="listVoices()">List Available Voices</button>
+    <button onclick="clearLog()">Clear Log</button>
+
+    <div id="log"></div>
+
+    <script>
+        const log = document.getElementById('log');
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${timestamp}] ${message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            log.innerHTML = '';
+        }
+
+        function listVoices() {
+            const voices = window.speechSynthesis.getVoices();
+            addLog(`Found ${voices.length} voices:`, 'info');
+            voices.forEach((voice, i) => {
+                addLog(`  ${i + 1}. ${voice.name} (${voice.lang}) ${voice.default ? '[DEFAULT]' : ''}`, 'info');
+            });
+        }
+
+        function speak(text) {
+            return new Promise((resolve, reject) => {
+                addLog(`Speaking: "${text}"`, 'info');
+
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
+
+                // Wait a bit after cancel
+                setTimeout(() => {
+                    const utterance = new SpeechSynthesisUtterance(text);
+
+                    // Get voices
+                    const voices = window.speechSynthesis.getVoices();
+                    if (voices.length === 0) {
+                        addLog('WARNING: No voices loaded!', 'error');
+                        reject(new Error('No voices available'));
+                        return;
+                    }
+
+                    // Use first English voice
+                    const englishVoice = voices.find(v => v.lang.startsWith('en'));
+                    if (englishVoice) {
+                        utterance.voice = englishVoice;
+                        utterance.lang = englishVoice.lang;
+                        addLog(`Using voice: ${englishVoice.name} (${englishVoice.lang})`, 'success');
+                    } else {
+                        utterance.voice = voices[0];
+                        utterance.lang = voices[0].lang;
+                        addLog(`Using first voice: ${voices[0].name} (${voices[0].lang})`, 'success');
+                    }
+
+                    utterance.volume = 1.0;
+                    utterance.rate = 1.0;
+                    utterance.pitch = 1.0;
+
+                    utterance.onstart = () => {
+                        addLog('Speech STARTED', 'success');
+                    };
+
+                    utterance.onend = () => {
+                        addLog('Speech ENDED', 'success');
+                        resolve();
+                    };
+
+                    utterance.onerror = (event) => {
+                        addLog(`Speech ERROR: ${event.error}`, 'error');
+                        reject(event);
+                    };
+
+                    // Check if paused
+                    if (window.speechSynthesis.paused) {
+                        addLog('Speech was paused, resuming...', 'info');
+                        window.speechSynthesis.resume();
+                    }
+
+                    window.speechSynthesis.speak(utterance);
+                    addLog('Utterance queued for speaking', 'info');
+
+                    // Force resume after delay
+                    setTimeout(() => {
+                        if (window.speechSynthesis.paused) {
+                            addLog('Force resuming...', 'info');
+                            window.speechSynthesis.resume();
+                        }
+                    }, 100);
+                }, 250); // Wait 250ms after cancel
+            });
+        }
+
+        async function testSimple() {
+            try {
+                await speak('test');
+            } catch (error) {
+                addLog(`Test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWithUsername() {
+            try {
+                await speak('ahoy04 says: test');
+            } catch (error) {
+                addLog(`Test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testYouTube() {
+            try {
+                await speak('Ahoy Galan says: dona');
+            } catch (error) {
+                addLog(`Test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Load voices on startup
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => {
+            addLog('Voices loaded/changed', 'success');
+            listVoices();
+        };
+
+        // Log initial state
+        addLog('Web Speech API Test Loaded', 'success');
+        setTimeout(() => listVoices(), 500);
+    </script>
+</body>
+</html>
