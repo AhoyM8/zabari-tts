@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-platform chat logger with real-time text-to-speech (TTS) for live streaming. Monitors Twitch, YouTube, and Kick chats using two connection methods: **Playwright browser automation** (local) or **Direct API connections** (Vercel-compatible). Features a modern Next.js web interface with live chat display and supports two TTS engines: Web Speech API (browser-based) and NeuTTS Air (AI voice cloning).
+Multi-platform chat logger with real-time text-to-speech (TTS) for live streaming. Monitors Twitch, YouTube, and Kick chats using two connection methods: **Playwright browser automation** (local) or **Direct API connections** (Vercel-compatible). Features a modern Next.js web interface with live chat display and supports three TTS engines: Web Speech API (browser-based), NeuTTS Air (AI voice cloning), and Kokoro-82M (lightweight & fast AI TTS).
 
 **NEW**: Dual connection mode allows deployment to Vercel and other serverless platforms without Playwright dependencies!
 
@@ -23,8 +23,8 @@ The web interface allows you to:
 - **Choose connection method**: Playwright (browser automation) or API (direct connections)
 - Toggle Twitch, YouTube, and Kick chats individually
 - Configure custom chat URLs for each platform
-- Choose between Web Speech API and NeuTTS Air TTS engines
-- Adjust TTS settings (volume, rate, pitch, filters)
+- Choose between Web Speech API, NeuTTS Air, and Kokoro-82M TTS engines
+- Adjust TTS settings (volume, rate, pitch, speed, voice selection, filters)
 - View live chat messages from all platforms in real-time
 
 ### Option 2: Command Line
@@ -48,6 +48,28 @@ source .venv/bin/activate && python tts-server.py  # Linux/Mac
 node chat-logger-tts.js
 ```
 
+**Chat Logger with Kokoro-82M:**
+**Terminal 1 - Start Kokoro TTS Server:**
+```bash
+cd kokoro-tts
+# Windows - CPU
+.venv/Scripts/python tts-server.py
+
+# Windows - GPU (NVIDIA CUDA)
+.venv/Scripts/python tts-server.py --device cuda
+
+# Linux/Mac - CPU
+source .venv/bin/activate && python tts-server.py
+
+# Linux/Mac - GPU (NVIDIA CUDA)
+source .venv/bin/activate && python tts-server.py --device cuda
+```
+
+**Terminal 2 - Start Chat Logger:**
+```bash
+node chat-logger-tts.js
+```
+
 ### Dependencies
 ```bash
 # Node.js (root directory)
@@ -57,10 +79,18 @@ npm install
 cd frontend
 npm install
 
-# Python TTS Server (optional - only for NeuTTS Air)
+# Python TTS Servers (optional - only for NeuTTS Air or Kokoro)
+# NeuTTS Air
 cd neutts-air
 uv venv
 uv pip install -r requirements.txt
+
+# Kokoro-82M
+cd kokoro-tts
+uv venv
+.venv/Scripts/activate  # Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+# Also install espeak-ng (see kokoro-tts/README.md)
 ```
 
 ## Architecture
@@ -84,7 +114,7 @@ uv pip install -r requirements.txt
 2. **Chat Connection Layer**:
    - **Playwright Mode**: `chat-logger-webspeech.js` or `chat-logger-tts.js` - Browser automation
    - **API Mode**: `lib/chat-api/` - Direct chat API clients (TMI.js for Twitch, Pusher for Kick, YouTube Data API)
-3. **TTS Engine** - Either Web Speech API (browser) or Python TTS Server (`neutts-air/tts-server.py`)
+3. **TTS Engine** - Web Speech API (browser), NeuTTS Air (`neutts-air/tts-server.py`), or Kokoro-82M (`kokoro-tts/tts-server.py`)
 
 ### Chat Message Flow (API Mode)
 
@@ -148,6 +178,24 @@ uv pip install -r requirements.txt
 - **Caching**: Reference audio encoded once per voice and cached in memory
 - **Queue System**: Messages queued to prevent overwhelming TTS server (100ms delay between requests)
 - **Output**: 24kHz WAV files saved to `audio_output/`
+- **Server**: Port 8765 (default)
+
+**Kokoro-82M (chat-logger-tts.js):**
+- **Model**: Kokoro-82M (82 million parameter lightweight TTS model)
+- **Built-in Voices**: 12 pre-trained voices (American/British, Male/Female)
+- **Voice Options**:
+  - American Female: af, af_bella, af_heart, af_nicole, af_sarah, af_sky
+  - American Male: am_adam, am_michael
+  - British Female: bf_emma, bf_isabella
+  - British Male: bm_george, bm_lewis
+- **Speed Control**: Adjustable speed parameter (0.5x to 2x)
+- **Fast Generation**: Optimized for real-time streaming
+- **GPU Acceleration**: Supports both CPU and NVIDIA CUDA GPU (controlled via `--device` flag)
+- **Output**: 24kHz WAV files saved to `audio_output/`
+- **Server**: Port 8766 (default)
+- **License**: Apache 2.0 (open-weight model)
+- **Multi-Language**: Supports English (American/British), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin
+- **Device Control**: Start server with `--device cpu` (default) or `--device cuda` for GPU acceleration
 
 ### Multi-Language TTS (Hebrew/English Auto-Detection)
 
@@ -195,15 +243,15 @@ uv pip install -r requirements.txt
 All configuration can be done through the web UI at http://localhost:3000:
 - **Connection Method**: Choose between Playwright (browser) or API (direct connections)
 - **Chat URLs**: Enable/disable platforms and customize URLs per platform
-- **TTS Engine**: Switch between Web Speech API and NeuTTS Air
+- **TTS Engine**: Switch between Web Speech API, NeuTTS Air, and Kokoro-82M
 - **TTS Settings**:
   - **Single Voice Mode**: Select one voice for all messages
-  - **Auto-Detect Language Mode**: Automatically switch between Hebrew and English voices
-  - Adjust volume, rate, pitch (Web Speech) or voice name (NeuTTS)
-- **Voice Selection** (Web Speech API only):
-  - Choose from all available system voices
-  - Filter voices by language (English, Hebrew, etc.)
-  - Separate voice selection for English and Hebrew when auto-detect is enabled
+  - **Auto-Detect Language Mode**: Automatically switch between Hebrew and English voices (Web Speech only)
+  - Adjust volume, rate, pitch (Web Speech), voice name (NeuTTS), or voice/speed (Kokoro)
+- **Voice Selection**:
+  - **Web Speech API**: Choose from all available system voices, filter by language
+  - **NeuTTS Air**: Enter custom voice name (requires voice sample in `neutts-air/samples/`)
+  - **Kokoro-82M**: Select from 12 built-in voices via dropdown, adjust speed
 - **Message Filtering**: Exclude commands, links, and specific usernames
 - **YouTube API Key**: Required for YouTube in API mode (optional in Playwright mode)
 - **Live Chat**: View all messages from enabled platforms in real-time
@@ -260,9 +308,17 @@ The system uses two separate message buffers:
 - Prevents stale messages when switching between modes
 
 ### TTS Server Endpoints
+
+**NeuTTS Air (Port 8765):**
 - `POST /synthesize` - Accepts `{text, voice}`, returns WAV audio
 - `GET /health` - Server status check
 - `GET /voices` - Lists available voice samples
+
+**Kokoro-82M (Port 8766):**
+- `POST /synthesize` - Accepts `{text, voice, speed}`, returns WAV audio
+- `GET /health` - Server status check
+- `GET /voices` - Lists 12 built-in voices
+- **GPU Control**: Server started with `--device cpu` or `--device cuda` flag (not API endpoint)
 
 ### Frontend API Endpoints
 - `POST /api/chat/start` - Starts chat logger (Playwright mode) or API clients (API mode)

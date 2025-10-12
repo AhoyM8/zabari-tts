@@ -15,7 +15,7 @@ export default function Home() {
   })
 
   // TTS engine selection
-  const [ttsEngine, setTtsEngine] = useState('webspeech') // 'webspeech' or 'neutts'
+  const [ttsEngine, setTtsEngine] = useState('webspeech') // 'webspeech', 'neutts', or 'kokoro'
 
   // Connection mode selection
   const [connectionMode, setConnectionMode] = useState('playwright') // 'playwright' or 'api'
@@ -45,6 +45,13 @@ export default function Home() {
   const [neuttsConfig, setNeuttsConfig] = useState({
     voice: 'dave',
     serverUrl: 'http://localhost:8765'
+  })
+
+  // Kokoro specific config
+  const [kokoroConfig, setKokoroConfig] = useState({
+    voice: 'af_heart',
+    speed: 1.0,
+    serverUrl: 'http://localhost:8766'
   })
 
   // App state
@@ -171,7 +178,8 @@ export default function Home() {
           ttsEngine,
           connectionMode,
           youtubeApiKey: connectionMode === 'api' ? youtubeApiKey : undefined,
-          ttsConfig: ttsEngine === 'webspeech' ? ttsConfig : neuttsConfig
+          ttsConfig: ttsEngine === 'webspeech' ? ttsConfig :
+                     ttsEngine === 'kokoro' ? kokoroConfig : neuttsConfig
         }
 
         const response = await fetch('/api/chat/start', {
@@ -516,6 +524,32 @@ export default function Home() {
                     </div>
                   </div>
                 </button>
+
+                {/* Kokoro TTS */}
+                <button
+                  onClick={() => setTtsEngine('kokoro')}
+                  className={`w-full p-4 rounded-lg border-2 transition-all ${
+                    ttsEngine === 'kokoro'
+                      ? 'border-green-500 bg-green-500/10'
+                      : 'border-gray-700 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <h3 className="font-semibold text-lg">Kokoro-82M</h3>
+                      <p className="text-sm text-gray-400">Lightweight & fast AI TTS (Requires server)</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 ${
+                      ttsEngine === 'kokoro' ? 'border-green-500 bg-green-500' : 'border-gray-600'
+                    }`}>
+                      {ttsEngine === 'kokoro' && (
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </button>
               </div>
 
               {/* NeuTTS Config */}
@@ -540,6 +574,68 @@ export default function Home() {
                       className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
                       placeholder="http://localhost:8765"
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* Kokoro Config */}
+              {ttsEngine === 'kokoro' && (
+                <div className="mt-6 space-y-4 p-4 bg-gray-800 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Voice</label>
+                    <select
+                      value={kokoroConfig.voice}
+                      onChange={(e) => setKokoroConfig(prev => ({ ...prev, voice: e.target.value }))}
+                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-green-500"
+                    >
+                      <optgroup label="American Female">
+                        <option value="af">af - Default Female</option>
+                        <option value="af_bella">af_bella - Bella</option>
+                        <option value="af_heart">af_heart - Heart</option>
+                        <option value="af_nicole">af_nicole - Nicole</option>
+                        <option value="af_sarah">af_sarah - Sarah</option>
+                        <option value="af_sky">af_sky - Sky</option>
+                      </optgroup>
+                      <optgroup label="American Male">
+                        <option value="am_adam">am_adam - Adam</option>
+                        <option value="am_michael">am_michael - Michael</option>
+                      </optgroup>
+                      <optgroup label="British Female">
+                        <option value="bf_emma">bf_emma - Emma</option>
+                        <option value="bf_isabella">bf_isabella - Isabella</option>
+                      </optgroup>
+                      <optgroup label="British Male">
+                        <option value="bm_george">bm_george - George</option>
+                        <option value="bm_lewis">bm_lewis - Lewis</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Speed: {kokoroConfig.speed.toFixed(1)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={kokoroConfig.speed}
+                      onChange={(e) => setKokoroConfig(prev => ({ ...prev, speed: parseFloat(e.target.value) }))}
+                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-green"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Server URL</label>
+                    <input
+                      type="text"
+                      value={kokoroConfig.serverUrl}
+                      onChange={(e) => setKokoroConfig(prev => ({ ...prev, serverUrl: e.target.value }))}
+                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-green-500"
+                      placeholder="http://localhost:8766"
+                    />
+                    <p className="mt-2 text-xs text-gray-500">
+                      Start the Kokoro server manually with <code className="bg-gray-900 px-1 py-0.5 rounded">--device cpu</code> or <code className="bg-gray-900 px-1 py-0.5 rounded">--device cuda</code>
+                    </p>
                   </div>
                 </div>
               )}
@@ -809,7 +905,87 @@ export default function Home() {
           </div>
         </div>
 
-        
+        {/* Live Chat Display - Always Visible */}
+        <div className="mt-8">
+          <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 card-hover">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+              <h2 className="text-xl sm:text-2xl font-bold">Live Chat</h2>
+              <div className="flex items-center gap-2">
+                {isRunning && <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>}
+                <span className="text-sm text-gray-400">
+                  {messages.length} message{messages.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-gray-950 rounded-lg p-3 sm:p-4 h-[400px] sm:h-[500px] overflow-y-auto" id="chat-container">
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <p className="text-lg font-medium mb-2">
+                      {isRunning ? 'Waiting for messages...' : 'Start chat logger to see messages'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {isRunning ? 'Messages will appear here as they arrive' : 'Enable a platform and click "Start Chat Logger" above'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="flex items-start gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors animate-fadeIn"
+                    >
+                      {/* Platform Badge */}
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+                        msg.platform === 'twitch' ? 'bg-twitch' :
+                        msg.platform === 'youtube' ? 'bg-youtube' :
+                        'bg-kick'
+                      }`}>
+                        {msg.platform === 'twitch' && (
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                          </svg>
+                        )}
+                        {msg.platform === 'youtube' && (
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                          </svg>
+                        )}
+                        {msg.platform === 'kick' && (
+                          <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7v10l10 5 10-5V7l-10-5zm0 2.18L19.82 8 12 11.82 4.18 8 12 4.18zM4 9.81l7 3.5v7.38l-7-3.5V9.81zm9 10.88v-7.38l7-3.5v7.38l-7 3.5z"/>
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Message Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className={`font-semibold ${
+                            msg.platform === 'twitch' ? 'text-twitch' :
+                            msg.platform === 'youtube' ? 'text-youtube' :
+                            'text-kick'
+                          }`}>
+                            {msg.username}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(msg.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="text-gray-200 break-words">{msg.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <style jsx>{`
@@ -827,6 +1003,24 @@ export default function Home() {
           height: 20px;
           border-radius: 50%;
           background: #a855f7;
+          cursor: pointer;
+          border: none;
+        }
+
+        .slider-green::-webkit-slider-thumb {
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #22c55e;
+          cursor: pointer;
+        }
+
+        .slider-green::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #22c55e;
           cursor: pointer;
           border: none;
         }

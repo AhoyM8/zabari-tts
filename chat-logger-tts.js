@@ -3,9 +3,74 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// TTS Configuration
-const TTS_SERVER_URL = 'http://localhost:8765';
-const TTS_VOICE = 'dave'; // Can be 'dave' or 'jo' (or any other voice in samples folder)
+// Load configuration from dynamic config or use defaults
+function loadConfig() {
+  const configPath = process.env.ZABARI_CONFIG || path.join(__dirname, 'dynamic-config.json');
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const dynamicConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+      // Build URLs object from platforms
+      const urls = {};
+      if (dynamicConfig.platforms) {
+        Object.keys(dynamicConfig.platforms).forEach(platform => {
+          if (dynamicConfig.platforms[platform].enabled) {
+            urls[platform] = dynamicConfig.platforms[platform].url;
+          }
+        });
+      }
+
+      // Determine TTS engine and configuration
+      const ttsEngine = dynamicConfig.ttsEngine || 'neutts';
+      let ttsServerUrl, ttsVoice, ttsSpeed;
+
+      if (ttsEngine === 'kokoro') {
+        // Kokoro configuration
+        ttsServerUrl = dynamicConfig.ttsConfig?.serverUrl || 'http://localhost:8766';
+        ttsVoice = dynamicConfig.ttsConfig?.voice || 'af_heart';
+        ttsSpeed = dynamicConfig.ttsConfig?.speed || 1.0;
+      } else {
+        // NeuTTS configuration (default)
+        ttsServerUrl = dynamicConfig.ttsConfig?.serverUrl || 'http://localhost:8765';
+        ttsVoice = dynamicConfig.ttsConfig?.voice || 'dave';
+        ttsSpeed = null; // NeuTTS doesn't use speed parameter
+      }
+
+      return {
+        urls,
+        ttsEngine,
+        ttsServerUrl,
+        ttsVoice,
+        ttsSpeed
+      };
+    } catch (error) {
+      console.error('Error loading dynamic config, using defaults:', error);
+    }
+  }
+
+  // Default configuration (NeuTTS)
+  return {
+    urls: {
+      twitch: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=',
+      youtube: 'https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU',
+      kick: 'https://kick.com/popout/xqc/chat'
+    },
+    ttsEngine: 'neutts',
+    ttsServerUrl: 'http://localhost:8765',
+    ttsVoice: 'dave',
+    ttsSpeed: null
+  };
+}
+
+const CONFIG = loadConfig();
+console.log('TTS Configuration:', {
+  engine: CONFIG.ttsEngine,
+  serverUrl: CONFIG.ttsServerUrl,
+  voice: CONFIG.ttsVoice,
+  speed: CONFIG.ttsSpeed
+});
+
 const AUDIO_OUTPUT_DIR = path.join(__dirname, 'audio_output');
 
 // Create audio output directory if it doesn't exist
@@ -17,16 +82,27 @@ if (!fs.existsSync(AUDIO_OUTPUT_DIR)) {
 const ttsQueue = [];
 let isProcessingQueue = false;
 
-async function synthesizeSpeech(text, platform, username) {
+async function synthesizeSpeech(text, platform, username, page) {
   return new Promise((resolve, reject) => {
-    const postData = JSON.stringify({
+    // Build request payload based on TTS engine
+    const payload = {
       text: `${username} says: ${text}`,
-      voice: TTS_VOICE
-    });
+      voice: CONFIG.ttsVoice
+    };
+
+    // Kokoro supports speed parameter
+    if (CONFIG.ttsEngine === 'kokoro' && CONFIG.ttsSpeed !== null) {
+      payload.speed = CONFIG.ttsSpeed;
+    }
+
+    const postData = JSON.stringify(payload);
+
+    // Parse server URL
+    const serverUrl = new URL(CONFIG.ttsServerUrl);
 
     const options = {
-      hostname: 'localhost',
-      port: 8765,
+      hostname: serverUrl.hostname,
+      port: serverUrl.port || (serverUrl.protocol === 'https:' ? 443 : 80),
       path: '/synthesize',
       method: 'POST',
       headers: {
@@ -42,18 +118,56 @@ async function synthesizeSpeech(text, platform, username) {
         chunks.push(chunk);
       });
 
-      res.on('end', () => {
+      res.on('end', async () => {
         if (res.statusCode === 200) {
           const audioBuffer = Buffer.concat(chunks);
 
-          // Save audio file
+          // Save audio file to disk
           const timestamp = Date.now();
           const filename = `${platform}_${username}_${timestamp}.wav`;
           const filepath = path.join(AUDIO_OUTPUT_DIR, filename);
 
           fs.writeFileSync(filepath, audioBuffer);
           console.log(`🔊 TTS audio saved: ${filename}`);
-          resolve(filepath);
+
+          // Play audio in browser using Web Audio API
+          try {
+            const base64Audio = audioBuffer.toString('base64');
+            await page.evaluate((audioData) => {
+              return new Promise((resolvePlay) => {
+                const binaryString = atob(audioData);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                audioContext.decodeAudioData(bytes.buffer, (audioBuffer) => {
+                  const source = audioContext.createBufferSource();
+                  source.buffer = audioBuffer;
+                  source.connect(audioContext.destination);
+
+                  source.onended = () => {
+                    console.log('Audio playback finished');
+                    resolvePlay();
+                  };
+
+                  source.start(0);
+                  console.log('Playing TTS audio...');
+                }, (error) => {
+                  console.error('Error decoding audio:', error);
+                  resolvePlay();
+                });
+              });
+            }, base64Audio);
+
+            console.log('✓ Audio played successfully');
+            resolve(filepath);
+          } catch (error) {
+            console.error('Error playing audio:', error.message);
+            resolve(filepath); // Still resolve even if playback fails
+          }
         } else {
           reject(new Error(`TTS request failed with status ${res.statusCode}`));
         }
@@ -76,10 +190,10 @@ async function processQueue() {
   isProcessingQueue = true;
 
   while (ttsQueue.length > 0) {
-    const { text, platform, username } = ttsQueue.shift();
+    const { text, platform, username, page } = ttsQueue.shift();
 
     try {
-      await synthesizeSpeech(text, platform, username);
+      await synthesizeSpeech(text, platform, username, page);
       // Small delay between TTS requests
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (error) {
@@ -90,17 +204,17 @@ async function processQueue() {
   isProcessingQueue = false;
 }
 
-function queueTTS(text, platform, username) {
+function queueTTS(text, platform, username, page) {
   // Skip empty messages or very short ones
   if (!text || text.trim().length < 2) return;
 
-  ttsQueue.push({ text, platform, username });
+  ttsQueue.push({ text, platform, username, page });
   processQueue();
 }
 
 async function checkTTSServer() {
   return new Promise((resolve) => {
-    const req = http.get(`${TTS_SERVER_URL}/health`, (res) => {
+    const req = http.get(`${CONFIG.ttsServerUrl}/health`, (res) => {
       resolve(res.statusCode === 200);
     });
 
@@ -122,63 +236,56 @@ async function logChatMessages() {
 
   if (!ttsServerRunning) {
     console.warn('\n⚠️  Warning: TTS server is not running!');
-    console.warn('Start the TTS server with: python tts-server.py');
+    console.warn(`Start the ${CONFIG.ttsEngine.toUpperCase()} TTS server`);
     console.warn('Chat messages will be logged but not converted to speech.\n');
   } else {
-    console.log('✓ TTS server is running\n');
+    console.log(`✓ ${CONFIG.ttsEngine.toUpperCase()} TTS server is running\n`);
   }
 
-  // Launch browser with headed mode to see the chats
+  // Launch browser with headed mode to see the chats and enable audio playback
   const browser = await chromium.launch({
-    headless: true,
-    args: ['--start-maximized', '--autoplay-policy=no-user-gesture-required']
+    headless: false,
+    args: ['--start-maximized', '--autoplay-policy=no-user-gesture-required', '--enable-audio-service-sandbox=false']
   });
 
   const context = await browser.newContext({
     viewport: null
   });
 
-  // Open Twitch chat in first page
-  const twitchPage = await context.newPage();
-  console.log('Opening Twitch chat...');
-  await twitchPage.goto('https://www.twitch.tv/popout/zabariyarin/chat?popout=');
+  // Open chat pages for enabled platforms
+  const pages = {};
+  const enabledPlatforms = Object.keys(CONFIG.urls);
 
-  // Open YouTube chat in second page
-  const youtubePage = await context.newPage();
-  console.log('Opening YouTube chat...');
-  await youtubePage.goto('https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU');
-
-  // Open Kick chat in third page
-  const kickPage = await context.newPage();
-  console.log('Opening Kick chat...');
-  await kickPage.goto('https://kick.com/popout/sprayitupjay/chat');
+  for (const platform of enabledPlatforms) {
+    const page = await context.newPage();
+    console.log(`Opening ${platform} chat...`);
+    await page.goto(CONFIG.urls[platform]);
+    pages[platform] = page;
+  }
 
   // Wait for pages to load (with timeout handling)
-  try {
-    await twitchPage.waitForLoadState('domcontentloaded', { timeout: 15000 });
-  } catch (e) {
-    console.log('Twitch page took longer to load, continuing anyway...');
+  for (const platform of enabledPlatforms) {
+    try {
+      await pages[platform].waitForLoadState('domcontentloaded', { timeout: 15000 });
+    } catch (e) {
+      console.log(`${platform} page took longer to load, continuing anyway...`);
+    }
   }
 
-  try {
-    await youtubePage.waitForLoadState('domcontentloaded', { timeout: 15000 });
-  } catch (e) {
-    console.log('YouTube page took longer to load, continuing anyway...');
-  }
-
-  try {
-    await kickPage.waitForLoadState('domcontentloaded', { timeout: 15000 });
-  } catch (e) {
-    console.log('Kick page took longer to load, continuing anyway...');
-  }
+  // Legacy support - assign pages to individual variables if needed
+  const twitchPage = pages['twitch'];
+  const youtubePage = pages['youtube'];
+  const kickPage = pages['kick'];
 
   // Give the pages a moment to initialize chat
   await new Promise(resolve => setTimeout(resolve, 3000));
 
   console.log('\n=== Starting to log chat messages with TTS ===\n');
+  console.log(`Enabled platforms: ${enabledPlatforms.join(', ')}\n`);
 
   // Listen for new Twitch chat messages using MutationObserver
-  await twitchPage.evaluate(() => {
+  if (twitchPage) {
+    await twitchPage.evaluate(() => {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
@@ -218,9 +325,11 @@ async function logChatMessages() {
       });
     }
   });
+  }
 
   // Listen for YouTube chat messages
-  await youtubePage.evaluate(() => {
+  if (youtubePage) {
+    await youtubePage.evaluate(() => {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
@@ -260,41 +369,51 @@ async function logChatMessages() {
       });
     }
   });
+  }
 
   // Capture console messages from Twitch page and send to TTS
-  twitchPage.on('console', async (msg) => {
+  if (twitchPage) {
+    twitchPage.on('console', async (msg) => {
     const text = msg.text();
     if (text.startsWith('TWITCH:')) {
       const parts = text.substring(7).split(':');
       const username = parts[0];
       const message = parts.slice(1).join(':');
 
+      // Output in both formats: for frontend parsing and for readability
+      console.log(`TWITCH:${username}:${message}`);
       console.log(`[Twitch Chat] ${username}: ${message}`);
 
       if (ttsServerRunning) {
-        queueTTS(message, 'twitch', username);
+        queueTTS(message, 'twitch', username, twitchPage);
       }
     }
   });
+  }
 
   // Capture console messages from YouTube page and send to TTS
-  youtubePage.on('console', async (msg) => {
+  if (youtubePage) {
+    youtubePage.on('console', async (msg) => {
     const text = msg.text();
     if (text.startsWith('YOUTUBE:')) {
       const parts = text.substring(8).split(':');
       const username = parts[0];
       const message = parts.slice(1).join(':');
 
+      // Output in both formats: for frontend parsing and for readability
+      console.log(`YOUTUBE:${username}:${message}`);
       console.log(`[YouTube Chat] ${username}: ${message}`);
 
       if (ttsServerRunning) {
-        queueTTS(message, 'youtube', username);
+        queueTTS(message, 'youtube', username, youtubePage);
       }
     }
   });
+  }
 
   // Listen for Kick chat messages
-  await kickPage.evaluate(() => {
+  if (kickPage) {
+    await kickPage.evaluate(() => {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
@@ -336,22 +455,27 @@ async function logChatMessages() {
       });
     }
   });
+  }
 
   // Capture console messages from Kick page and send to TTS
-  kickPage.on('console', async (msg) => {
+  if (kickPage) {
+    kickPage.on('console', async (msg) => {
     const text = msg.text();
     if (text.startsWith('KICK:')) {
       const parts = text.substring(5).split(':');
       const username = parts[0];
       const message = parts.slice(1).join(':');
 
+      // Output in both formats: for frontend parsing and for readability
+      console.log(`KICK:${username}:${message}`);
       console.log(`[Kick Chat] ${username}: ${message}`);
 
       if (ttsServerRunning) {
-        queueTTS(message, 'kick', username);
+        queueTTS(message, 'kick', username, kickPage);
       }
     }
   });
+  }
 
   console.log('Chat logger with TTS is running. Press Ctrl+C to stop.\n');
   console.log(`Audio files will be saved to: ${AUDIO_OUTPUT_DIR}\n`);
