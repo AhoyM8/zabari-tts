@@ -52,17 +52,18 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
 
       // Add new messages to queue
       newMessages.forEach(msg => {
-        const textToSpeak = ttsConfig.announceUsername
-          ? `${msg.username} says: ${msg.message}`
-          : msg.message
-
         console.log(`[TTS] Queuing message from ${msg.platform}:`, {
           username: msg.username,
           message: msg.message,
-          textToSpeak,
+          autoDetectLanguage: ttsConfig.autoDetectLanguage,
           announceUsername: ttsConfig.announceUsername
         })
-        messageQueueRef.current.push(textToSpeak)
+
+        // Queue as object to support language detection
+        messageQueueRef.current.push({
+          username: msg.username,
+          message: msg.message
+        })
       })
 
       lastProcessedIndexRef.current = messages.length
@@ -74,6 +75,27 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
       }
     }
   }, [messages, enabled, ttsConfig])
+
+  /**
+   * Detect if text is primarily Hebrew or English
+   * @param {string} text - Text to analyze
+   * @returns {string} - 'hebrew' or 'english'
+   */
+  const detectLanguage = (text) => {
+    // Hebrew Unicode range: \u0590-\u05FF
+    const hebrewChars = (text.match(/[\u0590-\u05FF]/g) || []).length
+    // Latin characters (English)
+    const latinChars = (text.match(/[a-zA-Z]/g) || []).length
+
+    const totalChars = hebrewChars + latinChars
+
+    // If no identifiable characters, default to English
+    if (totalChars === 0) return 'english'
+
+    // If more than 30% Hebrew characters, consider it Hebrew
+    const hebrewRatio = hebrewChars / totalChars
+    return hebrewRatio > 0.3 ? 'hebrew' : 'english'
+  }
 
   const processQueue = async () => {
     // Clear any existing timer
@@ -88,10 +110,40 @@ const TTSManager = forwardRef(function TTSManager({ messages, ttsConfig, enabled
     }
 
     isProcessingRef.current = true
-    const text = messageQueueRef.current.shift()
+    const item = messageQueueRef.current.shift()
 
     try {
-      await speak(text, ttsConfig)
+      // Item can be either a string (old behavior) or an object with username/message
+      if (typeof item === 'string') {
+        await speak(item, ttsConfig)
+      } else {
+        // New behavior with language detection
+        const { username, message } = item
+
+        if (ttsConfig.autoDetectLanguage) {
+          const usernameLanguage = detectLanguage(username)
+          const messageLanguage = detectLanguage(message)
+
+          console.log(`[TTS] Language detection: username="${username}" (${usernameLanguage}), message="${message}" (${messageLanguage})`)
+
+          if (ttsConfig.announceUsername) {
+            // Speak username with appropriate voice
+            await speak(username, { ...ttsConfig, voice: usernameLanguage === 'hebrew' ? ttsConfig.hebrewVoice : ttsConfig.englishVoice })
+            await new Promise(resolve => setTimeout(resolve, 100))
+
+            // Speak "says:" in English
+            await speak('says:', { ...ttsConfig, voice: ttsConfig.englishVoice })
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
+
+          // Speak message with appropriate voice
+          await speak(message, { ...ttsConfig, voice: messageLanguage === 'hebrew' ? ttsConfig.hebrewVoice : ttsConfig.englishVoice })
+        } else {
+          // Original behavior
+          const textToSpeak = ttsConfig.announceUsername ? `${username} says: ${message}` : message
+          await speak(textToSpeak, ttsConfig)
+        }
+      }
     } catch (error) {
       console.error('TTS error:', error)
     }

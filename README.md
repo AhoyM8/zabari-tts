@@ -1,36 +1,67 @@
 # Chat Logger with TTS
 
-Real-time chat monitoring and text-to-speech system for Twitch and YouTube live streams using Playwright and NeuTTS Air.
+Real-time chat monitoring and text-to-speech system for Twitch, YouTube, and Kick live streams. Features dual connection modes (Playwright/API), modern web interface, and advanced multi-language TTS support.
 
 ## Features
 
-- **Multi-Platform Support**: Monitors both Twitch and YouTube chat simultaneously
-- **Real-Time TTS**: Converts chat messages to speech using NeuTTS Air (on-device TTS)
-- **Voice Cloning**: Supports instant voice cloning with 3+ seconds of audio
-- **Audio Saving**: Saves all generated TTS audio files locally
-- **Browser Automation**: Uses Playwright to monitor chat windows
+### Core Features
+- **Multi-Platform Support**: Monitors Twitch, YouTube, and Kick chats simultaneously
+- **Dual Connection Modes**:
+  - **Playwright Mode**: Browser automation for local development
+  - **API Mode**: Direct API connections (Vercel-compatible, no browser needed)
+- **Modern Web Interface**: Next.js frontend with real-time chat display and configuration
+- **Two TTS Engines**:
+  - **Web Speech API**: Browser-based TTS (no server required)
+  - **NeuTTS Air**: AI voice cloning with custom voices
+
+### Advanced TTS Features
+- **🌍 Multi-Language Auto-Detection**: Automatically detect Hebrew/English text and switch voices
+- **🎤 Voice Selection**: Choose from all available system voices
+- **🔊 Customizable Settings**: Adjust volume, rate, and pitch
+- **📝 Username Announcement**: Optional username reading before messages
+- **🚫 Smart Filtering**: Exclude bot commands, links, and specific users
+- **💬 Live Chat Display**: See all messages in real-time with platform badges
 
 ## Project Structure
 
 ```
 zabari-tts/
-├── chat-logger.js           # Basic chat logger (no TTS)
-├── chat-logger-tts.js       # Chat logger with TTS integration
-├── neutts-air/              # NeuTTS Air TTS engine
-│   ├── tts-server.py        # HTTP server for TTS synthesis
-│   ├── .venv/               # Python virtual environment (created by uv)
-│   └── samples/             # Voice samples (dave.wav, jo.wav, etc.)
-└── audio_output/            # Generated TTS audio files
+├── frontend/                        # Next.js web interface
+│   ├── app/
+│   │   ├── page.js                  # Main UI with TTS controls
+│   │   ├── components/
+│   │   │   └── TTSManager.js        # Browser TTS manager for API mode
+│   │   └── api/
+│   │       └── chat/                # API routes for chat management
+│   └── lib/
+│       └── chat-api/                # Direct API clients (API mode)
+│           ├── twitch-client.js     # Twitch IRC client
+│           ├── youtube-client.js    # YouTube Data API client
+│           ├── kick-client.js       # Kick Pusher client
+│           └── message-buffer.js    # Message storage
+├── lib/
+│   └── chat-api/                    # Shared chat API clients
+├── chat-logger.js                   # Basic chat logger (no TTS)
+├── chat-logger-webspeech.js         # Playwright + Web Speech API
+├── chat-logger-tts.js               # Playwright + NeuTTS Air
+├── neutts-air/                      # NeuTTS Air TTS engine
+│   ├── tts-server.py                # HTTP server for TTS synthesis
+│   ├── .venv/                       # Python virtual environment
+│   └── samples/                     # Voice samples for cloning
+├── audio_output/                    # Generated TTS audio files
+└── dynamic-config.json              # Runtime configuration (generated)
 ```
 
 ## Setup Instructions
 
 ### Prerequisites
 
-1. **Node.js** (v18+) - for Playwright
-2. **Python** (3.11+) - for NeuTTS Air
-3. **uv** - fast Python package installer
-4. **espeak-ng** - phonemizer dependency (REQUIRED)
+1. **Node.js** (v18+) - for Playwright and Next.js frontend
+2. **Python** (3.11+) - for NeuTTS Air (optional)
+3. **uv** - fast Python package installer (optional, for NeuTTS)
+4. **espeak-ng** - phonemizer dependency (optional, for NeuTTS only)
+
+**Note**: Web Speech API mode doesn't require Python, uv, or espeak-ng!
 
 ### Installing espeak-ng on Windows
 
@@ -56,13 +87,22 @@ espeak --version
 
 ### Installing Dependencies
 
-#### 1. Install Node.js dependencies
+#### 1. Install Node.js dependencies (Required)
 
+**Root directory:**
 ```bash
 npm install
 ```
 
-#### 2. Set up Python environment with uv
+**Frontend (Next.js):**
+```bash
+cd frontend
+npm install
+```
+
+#### 2. Set up Python environment with uv (Optional - NeuTTS Air only)
+
+Only needed if you want to use NeuTTS Air voice cloning:
 
 ```bash
 cd neutts-air
@@ -72,45 +112,101 @@ uv pip install -r requirements.txt
 
 This creates a virtual environment at `neutts-air/.venv` and installs all Python dependencies quickly using uv.
 
+**Note**: Skip this step if you're only using Web Speech API!
+
 ## Usage
 
-### Option 1: Chat Logger Only (No TTS)
+### 🌟 Recommended: Web Interface
 
-Just monitor and log chat messages:
+The easiest way to use Zabari TTS is through the web interface:
+
+#### Step 1: Start the Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+#### Step 2: Open Browser
+
+Navigate to **http://localhost:3000**
+
+#### Step 3: Configure Settings
+
+1. **Choose Connection Method**:
+   - **Playwright Mode**: Best for local use with browser automation
+   - **API Mode**: Best for deployment to Vercel/serverless (no browser needed)
+
+2. **Enable Chat Platforms**:
+   - Toggle on Twitch, YouTube, and/or Kick
+   - Customize chat URLs for each platform
+
+3. **Select TTS Engine**:
+   - **Web Speech API** (Recommended): No server needed, uses system voices
+   - **NeuTTS Air**: High-quality AI voice cloning (requires Python server)
+
+4. **Configure TTS Settings**:
+   - **Single Voice Mode**: Choose one voice for all messages
+   - **Auto-Detect Language Mode**: 🌍 Enable Hebrew/English auto-detection
+     - Select separate voices for English and Hebrew
+     - System automatically detects language and switches voices
+   - Adjust volume, rate, and pitch
+   - Enable/disable username announcement
+   - Filter unwanted messages (commands, links, specific users)
+
+5. **Start Chat Logger**:
+   - Click "Start Chat Logger" button
+   - View live chat messages with platform badges
+   - Hear messages spoken with automatic language detection
+
+### Multi-Language TTS (Hebrew/English)
+
+**NEW**: Automatically detect Hebrew and English text in usernames and messages!
+
+**How it works:**
+- Analyzes each message to detect Hebrew (עברית) or English characters
+- Uses >30% Hebrew characters as threshold for Hebrew classification
+- Username and message are detected separately for maximum accuracy
+- Speaks each part with the appropriate voice
+
+**Example scenarios:**
+- `דניאל: hello everyone` → Hebrew voice + English "says:" + English voice
+- `John: שלום לכולם` → English voice + English "says:" + Hebrew voice
+- `דניאל: שלום!` → Hebrew voice + English "says:" + Hebrew voice
+
+**Setup:**
+1. Enable "Auto-detect Language (Hebrew/English)" toggle in TTS Settings
+2. Select your preferred English voice (e.g., Microsoft George)
+3. Select your preferred Hebrew voice (e.g., Microsoft Asaf)
+4. Start chatting! 🎉
+
+### Alternative: Command Line Usage
+
+#### Option 1: Chat Logger Only (No TTS)
 
 ```bash
 node chat-logger.js
 ```
 
-### Option 2: Chat Logger with TTS
+#### Option 2: Chat Logger with Web Speech API
 
-#### Step 1: Start the TTS Server
+```bash
+node chat-logger-webspeech.js
+```
 
+#### Option 3: Chat Logger with NeuTTS Air
+
+**Terminal 1 - Start TTS Server:**
 ```bash
 cd neutts-air
 .venv/Scripts/python tts-server.py
 ```
 
-Wait for the message: `🎤 TTS Server running at http://localhost:8765`
-
-The server will:
-- Load the NeuTTS Air model
-- Listen on port 8765
-- Cache voice references for faster generation
-
-#### Step 2: Start the Chat Logger
-
-In a new terminal:
-
+**Terminal 2 - Start Chat Logger:**
 ```bash
 node chat-logger-tts.js
 ```
-
-The script will:
-- Open Twitch and YouTube chat windows
-- Monitor incoming messages
-- Send messages to TTS server
-- Save audio files to `audio_output/`
 
 ### Configuring Chat URLs
 

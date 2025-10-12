@@ -22,6 +22,10 @@ export default function Home() {
 
   // TTS configuration
   const [ttsConfig, setTtsConfig] = useState({
+    voice: '',
+    autoDetectLanguage: false,
+    englishVoice: '',
+    hebrewVoice: '',
     volume: 1.0,
     rate: 1.0,
     pitch: 1.0,
@@ -30,6 +34,11 @@ export default function Home() {
     excludeLinks: true,
     excludeUsers: ['nightbot', 'moobot', 'streamelements', 'streamlabs', 'fossabot']
   })
+
+  // Web Speech API voices
+  const [availableVoices, setAvailableVoices] = useState([])
+  const [englishVoices, setEnglishVoices] = useState([])
+  const [hebrewVoices, setHebrewVoices] = useState([])
 
   // NeuTTS specific config
   const [neuttsConfig, setNeuttsConfig] = useState({
@@ -66,6 +75,50 @@ export default function Home() {
       container.scrollTop = container.scrollHeight
     }
   }, [messages])
+
+  // Fetch available Web Speech API voices
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices()
+        setAvailableVoices(voices)
+
+        // Filter voices by language
+        const english = voices.filter(v => v.lang.startsWith('en'))
+        const hebrew = voices.filter(v => v.lang.startsWith('he'))
+        setEnglishVoices(english)
+        setHebrewVoices(hebrew)
+
+        // Set default voices if none selected
+        if (voices.length > 0) {
+          if (!ttsConfig.voice) {
+            const defaultVoice = english[0] || voices[0]
+            setTtsConfig(prev => ({ ...prev, voice: defaultVoice.name }))
+          }
+          if (!ttsConfig.englishVoice && english.length > 0) {
+            setTtsConfig(prev => ({ ...prev, englishVoice: english[0].name }))
+          }
+          if (!ttsConfig.hebrewVoice && hebrew.length > 0) {
+            setTtsConfig(prev => ({ ...prev, hebrewVoice: hebrew[0].name }))
+          }
+        }
+      }
+
+      // Load voices immediately
+      loadVoices()
+
+      // Chrome loads voices asynchronously
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = loadVoices
+      }
+
+      return () => {
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = null
+        }
+      }
+    }
+  }, [])
 
   // Toggle platform
   const togglePlatform = (platform) => {
@@ -486,9 +539,101 @@ export default function Home() {
               <h2 className="text-2xl font-bold mb-6">TTS Settings</h2>
 
               <div className="space-y-6">
-                {/* Volume */}
+                {/* Voice Selection for Web Speech API */}
                 {ttsEngine === 'webspeech' && (
                   <>
+                    {/* Auto-detect Language Toggle */}
+                    <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ttsConfig.autoDetectLanguage}
+                          onChange={(e) => setTtsConfig(prev => ({ ...prev, autoDetectLanguage: e.target.checked }))}
+                          className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+                        />
+                        <div>
+                          <span className="font-semibold">Auto-detect Language (Hebrew/English)</span>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Automatically switch between Hebrew and English voices based on message content
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Voice Selection - Single or Dual based on auto-detect */}
+                    {ttsConfig.autoDetectLanguage ? (
+                      <>
+                        {/* English Voice */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">English Voice</label>
+                          <select
+                            value={ttsConfig.englishVoice}
+                            onChange={(e) => setTtsConfig(prev => ({ ...prev, englishVoice: e.target.value }))}
+                            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-purple-500"
+                          >
+                            {englishVoices.length === 0 ? (
+                              <option>No English voices available</option>
+                            ) : (
+                              englishVoices.map(voice => (
+                                <option key={voice.name} value={voice.name}>
+                                  {voice.name} ({voice.lang})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                          <p className="mt-2 text-xs text-gray-500">
+                            {englishVoices.length} English voice{englishVoices.length !== 1 ? 's' : ''} available
+                          </p>
+                        </div>
+
+                        {/* Hebrew Voice */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Hebrew Voice</label>
+                          <select
+                            value={ttsConfig.hebrewVoice}
+                            onChange={(e) => setTtsConfig(prev => ({ ...prev, hebrewVoice: e.target.value }))}
+                            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-purple-500"
+                          >
+                            {hebrewVoices.length === 0 ? (
+                              <option>No Hebrew voices available</option>
+                            ) : (
+                              hebrewVoices.map(voice => (
+                                <option key={voice.name} value={voice.name}>
+                                  {voice.name} ({voice.lang})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                          <p className="mt-2 text-xs text-gray-500">
+                            {hebrewVoices.length} Hebrew voice{hebrewVoices.length !== 1 ? 's' : ''} available
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Voice</label>
+                        <select
+                          value={ttsConfig.voice}
+                          onChange={(e) => setTtsConfig(prev => ({ ...prev, voice: e.target.value }))}
+                          className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-purple-500"
+                        >
+                          {availableVoices.length === 0 ? (
+                            <option>Loading voices...</option>
+                          ) : (
+                            availableVoices.map(voice => (
+                              <option key={voice.name} value={voice.name}>
+                                {voice.name} ({voice.lang})
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        <p className="mt-2 text-xs text-gray-500">
+                          {availableVoices.length} voice{availableVoices.length !== 1 ? 's' : ''} available
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Volume */}
                     <div>
                       <label className="block text-sm font-medium mb-2">
                         Volume: {ttsConfig.volume.toFixed(1)}

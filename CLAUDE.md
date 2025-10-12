@@ -139,6 +139,8 @@ uv pip install -r requirements.txt
 - No external server or dependencies required
 - Real-time synthesis with adjustable volume, rate, and pitch
 - Speaks directly in browser context via `page.evaluate()`
+- **Voice Selection**: Choose from all available system voices
+- **Multi-Language Support**: Auto-detect Hebrew/English and switch voices dynamically
 
 **NeuTTS Air (chat-logger-tts.js):**
 - **Model**: NeuTTS Air (quantized GGUF format for CPU inference)
@@ -147,6 +149,46 @@ uv pip install -r requirements.txt
 - **Queue System**: Messages queued to prevent overwhelming TTS server (100ms delay between requests)
 - **Output**: 24kHz WAV files saved to `audio_output/`
 
+### Multi-Language TTS (Hebrew/English Auto-Detection)
+
+**NEW FEATURE**: Automatic language detection for Hebrew and English content with dynamic voice switching.
+
+**How It Works:**
+
+1. **Language Detection Algorithm** (lines 137-150 in `chat-logger-webspeech.js`):
+   - Counts Hebrew characters (Unicode range U+0590-U+05FF)
+   - Counts Latin characters (a-z, A-Z)
+   - Calculates Hebrew ratio: `hebrewChars / (hebrewChars + latinChars)`
+   - If ratio > 30%, classifies as Hebrew; otherwise English
+   - Defaults to English if no identifiable characters found
+
+2. **Separate Detection for Username and Message**:
+   - Username language is detected independently from message language
+   - Example: Hebrew username "דניאל" can have English message "hello everyone"
+   - Each part is spoken with the appropriate voice
+
+3. **Multi-Utterance Speech Synthesis**:
+   - When auto-detect is enabled and username announcement is on:
+     - **Utterance 1**: Username (Hebrew or English voice based on detection)
+     - **Utterance 2**: "says:" (always English voice as bridge)
+     - **Utterance 3**: Message (Hebrew or English voice based on detection)
+   - 100ms pause between utterances for natural flow
+
+4. **Example Scenarios**:
+   - `דניאל: hello everyone` → Hebrew voice + English "says:" + English voice
+   - `John: שלום לכולם` → English voice + English "says:" + Hebrew voice
+   - `דניאל: שלום!` → Hebrew voice + English "says:" + Hebrew voice
+
+**Configuration Options:**
+- **Auto-Detect Language**: Toggle to enable/disable (default: disabled)
+- **English Voice**: Select from available English voices (en-*)
+- **Hebrew Voice**: Select from available Hebrew voices (he-*)
+- **Single Voice**: Used when auto-detect is disabled
+
+**Supported in Both Modes:**
+- Playwright Mode: Lines 167-268 in `chat-logger-webspeech.js`
+- API Mode: Lines 83-155 in `frontend/app/components/TTSManager.js`
+
 ## Configuration
 
 ### Web Interface (Recommended)
@@ -154,7 +196,14 @@ All configuration can be done through the web UI at http://localhost:3000:
 - **Connection Method**: Choose between Playwright (browser) or API (direct connections)
 - **Chat URLs**: Enable/disable platforms and customize URLs per platform
 - **TTS Engine**: Switch between Web Speech API and NeuTTS Air
-- **TTS Settings**: Adjust volume, rate, pitch (Web Speech) or voice name (NeuTTS)
+- **TTS Settings**:
+  - **Single Voice Mode**: Select one voice for all messages
+  - **Auto-Detect Language Mode**: Automatically switch between Hebrew and English voices
+  - Adjust volume, rate, pitch (Web Speech) or voice name (NeuTTS)
+- **Voice Selection** (Web Speech API only):
+  - Choose from all available system voices
+  - Filter voices by language (English, Hebrew, etc.)
+  - Separate voice selection for English and Hebrew when auto-detect is enabled
 - **Message Filtering**: Exclude commands, links, and specific usernames
 - **YouTube API Key**: Required for YouTube in API mode (optional in Playwright mode)
 - **Live Chat**: View all messages from enabled platforms in real-time
@@ -195,6 +244,20 @@ Kick's dynamic class names required flexible selector strategy:
 - Searches for any `<button>` element containing username
 - Uses `fullText.lastIndexOf(username + ':')` to handle timestamps/duplicates
 - Observes entire chatroom container with `subtree: true` due to nested structure
+
+### Message Buffer Routing
+The system uses two separate message buffers:
+- **Playwright Mode Buffer**: Array-based buffer in `frontend/app/api/chat/messages/route.js`
+  - Messages parsed from chat-logger process stdout
+  - Format: `PLATFORM:username:message`
+- **API Mode Buffer**: Class-based buffer in `lib/chat-api/message-buffer.js`
+  - Messages added directly by chat API clients (Twitch, YouTube, Kick)
+  - Singleton pattern for shared access
+
+**Mode Tracking**: `setConnectionMode()` function tracks active mode to route GET requests to correct buffer:
+- When mode is 'playwright', returns array buffer
+- When mode is 'api', returns class-based buffer
+- Prevents stale messages when switching between modes
 
 ### TTS Server Endpoints
 - `POST /synthesize` - Accepts `{text, voice}`, returns WAV audio

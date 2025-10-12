@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
-import { addMessage, clearMessages } from '../messages/route.js'
+import { addMessage, clearMessages, setConnectionMode } from '../messages/route.js'
 
 // Store active process (Playwright mode) or clients (API mode)
 let chatProcess = null
@@ -14,7 +14,7 @@ export async function POST(request) {
     const { connectionMode = 'playwright' } = config
 
     // Clear old messages
-    clearMessages()
+    await clearMessages()
 
     // Handle based on connection mode
     if (connectionMode === 'playwright') {
@@ -46,6 +46,9 @@ async function startPlaywrightMode(config) {
     chatProcess.kill()
     chatProcess = null
   }
+
+  // Set connection mode for message routing
+  setConnectionMode('playwright')
 
   // Create dynamic config file
   const configPath = path.join(process.cwd(), '..', 'dynamic-config.json')
@@ -110,6 +113,9 @@ async function startPlaywrightMode(config) {
  */
 async function startApiMode(config) {
   try {
+    // Set connection mode for message routing
+    setConnectionMode('api')
+
     // Dynamically import the chat API module
     const chatApiModule = await import('../../../../lib/chat-api/index.js')
     const { initializeChatClients, disconnectAll } = chatApiModule
@@ -183,5 +189,8 @@ export async function stopAll() {
     apiClients = null
   }
 
-  clearMessages()
+  // Reset connection mode
+  setConnectionMode(null)
+
+  await clearMessages()
 }

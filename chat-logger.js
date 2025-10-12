@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 async function logChatMessages() {
   // Launch browser with headed mode to see the chats
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     args: ['--start-maximized']
   });
 

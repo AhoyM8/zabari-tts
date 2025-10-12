@@ -38,6 +38,9 @@ function loadConfig() {
         tts: {
           enabled: true,
           voice: dynamicConfig.ttsConfig?.voice || 'Microsoft David - English (United States)',
+          autoDetectLanguage: dynamicConfig.ttsConfig?.autoDetectLanguage ?? false,
+          englishVoice: dynamicConfig.ttsConfig?.englishVoice || 'Microsoft David - English (United States)',
+          hebrewVoice: dynamicConfig.ttsConfig?.hebrewVoice || 'Microsoft David - English (United States)',
           volume: dynamicConfig.ttsConfig?.volume || 1.0,
           rate: dynamicConfig.ttsConfig?.rate || 1.0,
           pitch: dynamicConfig.ttsConfig?.pitch || 1.0,
@@ -66,6 +69,9 @@ function loadConfig() {
     tts: {
       enabled: true,
       voice: 'Microsoft David - English (United States)',
+      autoDetectLanguage: false,
+      englishVoice: 'Microsoft David - English (United States)',
+      hebrewVoice: 'Microsoft David - English (United States)',
       volume: 1.0,
       rate: 1.0,
       pitch: 1.0,
@@ -124,6 +130,27 @@ function shouldSpeak(username, message) {
 }
 
 /**
+ * Detect if text is primarily Hebrew or English
+ * @param {string} text - Text to analyze
+ * @returns {string} - 'hebrew' or 'english'
+ */
+function detectLanguage(text) {
+  // Hebrew Unicode range: \u0590-\u05FF
+  const hebrewChars = (text.match(/[\u0590-\u05FF]/g) || []).length;
+  // Latin characters (English)
+  const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
+
+  const totalChars = hebrewChars + latinChars;
+
+  // If less than 30% are identifiable characters, default to English
+  if (totalChars === 0) return 'english';
+
+  // If more than 30% Hebrew characters, consider it Hebrew
+  const hebrewRatio = hebrewChars / totalChars;
+  return hebrewRatio > 0.3 ? 'hebrew' : 'english';
+}
+
+/**
  * Process message queue sequentially
  */
 async function processQueue(page) {
@@ -137,44 +164,146 @@ async function processQueue(page) {
     const { username, message } = messageQueue.shift();
 
     try {
-      // Speak the message using Web Speech API in browser context
-      await page.evaluate(({ text, config }) => {
-        return new Promise((resolve) => {
-          // Check if speechSynthesis is available
-          if (!window.speechSynthesis) {
-            console.error('Speech synthesis not available in this browser');
-            resolve();
-            return;
-          }
+      if (CONFIG.tts.autoDetectLanguage) {
+        // Detect language separately for username and message
+        const usernameLanguage = detectLanguage(username);
+        const messageLanguage = detectLanguage(message);
 
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.volume = config.volume;
-          utterance.rate = config.rate;
-          utterance.pitch = config.pitch;
+        console.log(`Language detection: username="${username}" (${usernameLanguage}), message="${message}" (${messageLanguage})`);
 
-          // Try to find the requested voice
-          const voices = window.speechSynthesis.getVoices();
-          const selectedVoice = voices.find(v => v.name === config.voice);
-          if (selectedVoice) {
-            utterance.voice = selectedVoice;
-          } else if (voices.length > 0) {
-            // Use first available voice as fallback
-            utterance.voice = voices[0];
-            console.log(`Voice "${config.voice}" not found. Using "${voices[0].name}" instead.`);
-          }
+        if (CONFIG.tts.announceUsername) {
+          // Speak username with appropriate voice
+          await page.evaluate(({ text, voiceName, config }) => {
+            return new Promise((resolve) => {
+              if (!window.speechSynthesis) {
+                resolve();
+                return;
+              }
 
-          utterance.onend = () => resolve();
-          utterance.onerror = (error) => {
-            console.error('Speech synthesis error:', error);
-            resolve();
-          };
+              const utterance = new SpeechSynthesisUtterance(text);
+              utterance.volume = config.volume;
+              utterance.rate = config.rate;
+              utterance.pitch = config.pitch;
 
-          window.speechSynthesis.speak(utterance);
+              const voices = window.speechSynthesis.getVoices();
+              const selectedVoice = voices.find(v => v.name === voiceName);
+              if (selectedVoice) {
+                utterance.voice = selectedVoice;
+              }
+
+              utterance.onend = () => resolve();
+              utterance.onerror = () => resolve();
+
+              window.speechSynthesis.speak(utterance);
+            });
+          }, {
+            text: username,
+            voiceName: usernameLanguage === 'hebrew' ? CONFIG.tts.hebrewVoice : CONFIG.tts.englishVoice,
+            config: CONFIG.tts
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          // Speak "says:" in English
+          await page.evaluate(({ text, voiceName, config }) => {
+            return new Promise((resolve) => {
+              if (!window.speechSynthesis) {
+                resolve();
+                return;
+              }
+
+              const utterance = new SpeechSynthesisUtterance(text);
+              utterance.volume = config.volume;
+              utterance.rate = config.rate;
+              utterance.pitch = config.pitch;
+
+              const voices = window.speechSynthesis.getVoices();
+              const selectedVoice = voices.find(v => v.name === voiceName);
+              if (selectedVoice) {
+                utterance.voice = selectedVoice;
+              }
+
+              utterance.onend = () => resolve();
+              utterance.onerror = () => resolve();
+
+              window.speechSynthesis.speak(utterance);
+            });
+          }, {
+            text: 'says:',
+            voiceName: CONFIG.tts.englishVoice,
+            config: CONFIG.tts
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // Speak message with appropriate voice
+        await page.evaluate(({ text, voiceName, config }) => {
+          return new Promise((resolve) => {
+            if (!window.speechSynthesis) {
+              resolve();
+              return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.volume = config.volume;
+            utterance.rate = config.rate;
+            utterance.pitch = config.pitch;
+
+            const voices = window.speechSynthesis.getVoices();
+            const selectedVoice = voices.find(v => v.name === voiceName);
+            if (selectedVoice) {
+              utterance.voice = selectedVoice;
+            }
+
+            utterance.onend = () => resolve();
+            utterance.onerror = () => resolve();
+
+            window.speechSynthesis.speak(utterance);
+          });
+        }, {
+          text: message,
+          voiceName: messageLanguage === 'hebrew' ? CONFIG.tts.hebrewVoice : CONFIG.tts.englishVoice,
+          config: CONFIG.tts
         });
-      }, {
-        text: CONFIG.tts.announceUsername ? `${username} says: ${message}` : message,
-        config: CONFIG.tts
-      });
+
+      } else {
+        // Original behavior: use single voice
+        await page.evaluate(({ text, config }) => {
+          return new Promise((resolve) => {
+            if (!window.speechSynthesis) {
+              console.error('Speech synthesis not available in this browser');
+              resolve();
+              return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.volume = config.volume;
+            utterance.rate = config.rate;
+            utterance.pitch = config.pitch;
+
+            const voices = window.speechSynthesis.getVoices();
+            const selectedVoice = voices.find(v => v.name === config.voice);
+            if (selectedVoice) {
+              utterance.voice = selectedVoice;
+            } else if (voices.length > 0) {
+              utterance.voice = voices[0];
+              console.log(`Voice "${config.voice}" not found. Using "${voices[0].name}" instead.`);
+            }
+
+            utterance.onend = () => resolve();
+            utterance.onerror = (error) => {
+              console.error('Speech synthesis error:', error);
+              resolve();
+            };
+
+            window.speechSynthesis.speak(utterance);
+          });
+        }, {
+          text: CONFIG.tts.announceUsername ? `${username} says: ${message}` : message,
+          config: CONFIG.tts
+        });
+      }
 
       // Small delay between messages
       await new Promise(resolve => setTimeout(resolve, 100));
