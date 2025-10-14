@@ -29,6 +29,7 @@ function loadConfig() {
 
       return {
         urls,
+        ttsEngine: dynamicConfig.ttsEngine || 'webspeech',
         tts: {
           enabled: true,
           voice: dynamicConfig.ttsConfig?.voice || 'Microsoft David - English (United States)',
@@ -39,6 +40,11 @@ function loadConfig() {
           rate: dynamicConfig.ttsConfig?.rate || 1.0,
           pitch: dynamicConfig.ttsConfig?.pitch || 1.0,
           announceUsername: dynamicConfig.ttsConfig?.announceUsername ?? true
+        },
+        kokoro: {
+          voice: dynamicConfig.ttsConfig?.voice || 'af_heart',
+          speed: dynamicConfig.ttsConfig?.speed || 1.0,
+          serverUrl: dynamicConfig.ttsConfig?.serverUrl || 'http://localhost:8766'
         },
         filters: {
           excludeCommands: dynamicConfig.ttsConfig?.excludeCommands ?? true,
@@ -62,6 +68,7 @@ function loadConfig() {
 
   return {
     urls: buildUrlsFromPlatforms(defaultPlatforms),
+    ttsEngine: 'webspeech',
     tts: {
       enabled: true,
       voice: 'Microsoft David - English (United States)',
@@ -72,6 +79,11 @@ function loadConfig() {
       rate: 1.0,
       pitch: 1.0,
       announceUsername: true
+    },
+    kokoro: {
+      voice: 'af_heart',
+      speed: 1.0,
+      serverUrl: 'http://localhost:8766'
     },
     filters: {
       excludeCommands: true,
@@ -147,6 +159,89 @@ function detectLanguage(text) {
 }
 
 /**
+ * Synthesize text using Kokoro TTS server and play it in the browser
+ */
+async function synthesizeWithKokoro(text, page) {
+  const http = require('http');
+  const url = require('url');
+
+  return new Promise((resolve, reject) => {
+    try {
+      console.log(`[Kokoro TTS] Synthesizing: "${text}"`);
+
+      const serverUrl = new url.URL(`${CONFIG.kokoro.serverUrl}/synthesize`);
+      const postData = JSON.stringify({
+        text: text,
+        voice: CONFIG.kokoro.voice,
+        speed: CONFIG.kokoro.speed
+      });
+
+      const options = {
+        hostname: serverUrl.hostname,
+        port: serverUrl.port || 8766,
+        path: serverUrl.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const req = http.request(options, (res) => {
+        let data = [];
+
+        res.on('data', (chunk) => {
+          data.push(chunk);
+        });
+
+        res.on('end', async () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            console.log('[Kokoro TTS] Synthesis completed, playing audio...');
+
+            // Convert buffer to base64
+            const audioBuffer = Buffer.concat(data);
+            const audioBase64 = audioBuffer.toString('base64');
+
+            // Play audio in the browser
+            try {
+              await page.evaluate((base64Audio) => {
+                return new Promise((audioResolve) => {
+                  const audio = new Audio('data:audio/wav;base64,' + base64Audio);
+                  audio.volume = 1.0;
+                  audio.onended = () => audioResolve();
+                  audio.onerror = () => audioResolve(); // Continue even if error
+                  audio.play().catch(() => audioResolve());
+                });
+              }, audioBase64);
+
+              console.log('[Kokoro TTS] Audio playback finished');
+              resolve();
+            } catch (playError) {
+              console.error('[Kokoro TTS] Playback error:', playError.message);
+              resolve(); // Continue even if playback fails
+            }
+          } else {
+            reject(new Error(`Kokoro server returned ${res.statusCode}: ${res.statusMessage}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        console.error('[Kokoro TTS] Request error:', error.message);
+        reject(error);
+      });
+
+      req.write(postData);
+      req.end();
+
+    } catch (error) {
+      console.error('[Kokoro TTS] Synthesis error:', error.message);
+      reject(error);
+    }
+  });
+}
+
+/**
  * Process message queue sequentially
  */
 async function processQueue(page) {
@@ -160,7 +255,18 @@ async function processQueue(page) {
     const { username, message } = messageQueue.shift();
 
     try {
-      if (CONFIG.tts.autoDetectLanguage) {
+      // Check if using Kokoro TTS
+      if (CONFIG.ttsEngine === 'kokoro') {
+        // Build text to speak
+        const textToSpeak = CONFIG.tts.announceUsername ? `${username} says: ${message}` : message;
+
+        // Call Kokoro server and play audio
+        await synthesizeWithKokoro(textToSpeak, page);
+
+        // Small delay between messages
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+      } else if (CONFIG.tts.autoDetectLanguage) {
         // Detect language separately for username and message
         const usernameLanguage = detectLanguage(username);
         const messageLanguage = detectLanguage(message);
@@ -374,10 +480,10 @@ async function setupChatMonitoring(page, platform) {
       messageBodySelector: '#message'
     },
     kick: {
-      container: '[id*="channel-chatroom"]',
-      messageSelector: '.chat-entry',
-      usernameSelector: 'button',
-      messageBodySelector: null // Extract from full text
+      container: 'body',
+      messageSelector: 'div[data-index]', // Kick uses virtualized list with data-index
+      usernameSelector: 'button.inline.font-bold',
+      messageBodySelector: 'span:last-child' // Message is in the last span
     }
   };
 
@@ -406,16 +512,18 @@ async function setupChatMonitoring(page, platform) {
                 let message = '';
 
                 if (platform === 'kick') {
-                  // Kick requires special handling
+                  // Kick structure: button contains username, last span contains message
                   const usernameButton = element.querySelector(config.usernameSelector);
-                  if (usernameButton) {
-                    username = usernameButton.textContent.trim();
-                  }
+                  const messageSpan = element.querySelector(config.messageBodySelector);
 
-                  const fullText = element.textContent.trim();
-                  const usernameIndex = fullText.lastIndexOf(username + ':');
-                  if (usernameIndex !== -1) {
-                    message = fullText.substring(usernameIndex + username.length + 1).trim();
+                  if (usernameButton && messageSpan) {
+                    username = usernameButton.textContent.trim();
+                    message = messageSpan.textContent.trim();
+
+                    // Filter out empty messages and timestamps
+                    if (message && message !== ':' && !message.match(/^\d{2}:\d{2}/) && message.length > 0) {
+                      console.log(`${platform}:${username}:${message}`);
+                    }
                   }
                 } else {
                   // Twitch and YouTube
@@ -425,11 +533,11 @@ async function setupChatMonitoring(page, platform) {
                   if (usernameEl && messageEl) {
                     username = usernameEl.textContent.trim();
                     message = messageEl.textContent.trim();
-                  }
-                }
 
-                if (username && message) {
-                  console.log(`${platform}:${username}:${message}`);
+                    if (username && message) {
+                      console.log(`${platform}:${username}:${message}`);
+                    }
+                  }
                 }
               } catch (err) {
                 // Silently ignore parsing errors

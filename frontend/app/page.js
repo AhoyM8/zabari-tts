@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'react-toastify'
+import { FaTwitch, FaYoutube } from 'react-icons/fa'
+import { SiKick } from 'react-icons/si'
 import TTSManager from './components/TTSManager'
+import KokoroTTSManager from './components/KokoroTTSManager'
 import ElectronTTSManager from './components/ElectronTTSManager'
 
 export default function Home() {
@@ -222,11 +225,27 @@ export default function Home() {
     }))
   }
 
+  // Skip current TTS
+  const skipCurrentTTS = () => {
+    if (connectionMode === 'api' && ttsManagerRef.current) {
+      // For API mode, cancel current and let queue continue
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+      toast.info('Skipped current TTS')
+    } else {
+      // For Playwright mode, we can't directly control it from here
+      toast.warning('Skip current is only available in API mode')
+    }
+  }
+
   // Cancel all TTS
   const cancelAllTTS = () => {
     if (ttsManagerRef.current) {
       ttsManagerRef.current.cancelAll()
       toast.info('All TTS messages cancelled')
+    } else {
+      toast.warning('Cancel all is only available in API mode')
     }
   }
 
@@ -243,8 +262,8 @@ export default function Home() {
         onServerStatusChange={handleServerStatusChange}
       />
 
-      {/* TTS Manager for API mode - only active when using API connection */}
-      {connectionMode === 'api' && isRunning && (
+      {/* TTS Manager for API mode - only active when using API connection with Web Speech */}
+      {connectionMode === 'api' && isRunning && ttsEngine === 'webspeech' && (
         <TTSManager
           ref={ttsManagerRef}
           messages={messages}
@@ -253,14 +272,155 @@ export default function Home() {
         />
       )}
 
+      {/* Kokoro TTS Manager for API mode - only active when using API connection with Kokoro */}
+      {connectionMode === 'api' && isRunning && ttsEngine === 'kokoro' && (
+        <KokoroTTSManager
+          ref={ttsManagerRef}
+          messages={messages}
+          kokoroConfig={kokoroConfig}
+          ttsConfig={ttsConfig}
+          enabled={true}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <header className="mb-8 sm:mb-12 text-center animate-slideIn">
+        <header className="mb-8 sm:mb-12 text-center">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-transparent bg-clip-text">
             Zabari TTS
           </h1>
           <p className="text-gray-400 text-base sm:text-lg">Multi-Platform Chat Logger with Text-to-Speech</p>
         </header>
+
+        {/* Live Chat Display - At Top with Overlay */}
+        <div className="mb-8 relative">
+          <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+              <h2 className="text-xl sm:text-2xl font-bold">Live Chat</h2>
+              <div className="flex items-center gap-2">
+                {isRunning && <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>}
+                <span className="text-sm text-gray-400">
+                  {messages.length} message{messages.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-gray-950 rounded-lg p-3 sm:p-4 h-[400px] sm:h-[500px] overflow-y-auto relative" id="chat-container">
+              {/* Disabled overlay when not running */}
+              {!isRunning && (
+                <div className="absolute inset-0 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    <p className="text-lg font-semibold mb-2 text-gray-300">Chat Not Active</p>
+                    <p className="text-sm text-gray-500">Configure settings below and start the chat logger</p>
+                  </div>
+                </div>
+              )}
+
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <p className="text-lg font-medium mb-2">Waiting for messages...</p>
+                    <p className="text-sm text-gray-600">Messages will appear here as they arrive</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="flex items-start gap-3 p-3 bg-gray-800/50 rounded-lg"
+                    >
+                      {/* Platform Badge */}
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+                        msg.platform === 'twitch' ? 'bg-twitch' :
+                        msg.platform === 'youtube' ? 'bg-youtube' :
+                        'bg-kick'
+                      }`}>
+                        {msg.platform === 'twitch' && <FaTwitch className="w-5 h-5 text-white" />}
+                        {msg.platform === 'youtube' && <FaYoutube className="w-5 h-5 text-white" />}
+                        {msg.platform === 'kick' && <SiKick className="w-5 h-5 text-white" />}
+                      </div>
+
+                      {/* Message Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className={`font-semibold ${
+                            msg.platform === 'twitch' ? 'text-twitch' :
+                            msg.platform === 'youtube' ? 'text-youtube' :
+                            'text-kick'
+                          }`}>
+                            {msg.username}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(msg.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="text-gray-200 break-words">{msg.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Control Buttons */}
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+              {/* Start/Stop Button */}
+              <button
+                onClick={toggleChatLogger}
+                disabled={status === 'error'}
+                className={`flex-1 py-3 rounded-lg font-bold text-base transition-colors shadow-md ${
+                  isRunning
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                } ${status === 'error' ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isRunning ? '⏹ Stop Chat Logger' : '▶ Start Chat Logger'}
+              </button>
+
+              {/* TTS Control Buttons - Only show in API mode when running */}
+              {connectionMode === 'api' && isRunning && (
+                <>
+                  <button
+                    onClick={skipCurrentTTS}
+                    className="px-4 py-3 rounded-lg font-semibold text-sm transition-colors bg-yellow-600 hover:bg-yellow-700 flex items-center justify-center gap-2 shadow-md whitespace-nowrap"
+                    title="Skip current TTS message"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+                    </svg>
+                    Skip Current
+                  </button>
+                  <button
+                    onClick={cancelAllTTS}
+                    className="px-4 py-3 rounded-lg font-semibold text-sm transition-colors bg-orange-600 hover:bg-orange-700 flex items-center justify-center gap-2 shadow-md whitespace-nowrap"
+                    title="Cancel all TTS messages in queue"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    Cancel All
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Status Indicator */}
+            <div className={`mt-3 text-center py-2 rounded-lg text-sm ${
+              status === 'running' ? 'bg-green-500/20 text-green-400' :
+              status === 'error' ? 'bg-red-500/20 text-red-400' :
+              'bg-gray-800 text-gray-400'
+            }`}>
+              Status: {status.charAt(0).toUpperCase() + status.slice(1)}
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
           {/* Left Column - Chat Platforms */}
@@ -273,9 +433,7 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-twitch rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
-                      </svg>
+                      <FaTwitch className="w-6 h-6 text-white" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold">Twitch</h3>
@@ -311,9 +469,7 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-youtube rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                      </svg>
+                      <FaYoutube className="w-7 h-7 text-white" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold">YouTube</h3>
@@ -349,9 +505,7 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-kick rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2L2 7v10l10 5 10-5V7l-10-5zm0 2.18L19.82 8 12 11.82 4.18 8 12 4.18zM4 9.81l7 3.5v7.38l-7-3.5V9.81zm9 10.88v-7.38l7-3.5v7.38l-7 3.5z"/>
-                      </svg>
+                      <SiKick className="w-6 h-6 text-white" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold">Kick</h3>
@@ -452,7 +606,7 @@ export default function Home() {
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
                     </svg>
                     <div>
-                      <strong>API Mode TTS:</strong> Uses browser Web Speech API for text-to-speech.
+                      <strong>API Mode TTS:</strong> Supports both Web Speech API and Kokoro TTS engines.
                     </div>
                   </div>
 
@@ -824,123 +978,6 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Control Buttons */}
-            <button
-              onClick={toggleChatLogger}
-              disabled={status === 'error'}
-              className={`w-full py-3 sm:py-4 rounded-xl font-bold text-base sm:text-lg transition-all shadow-lg hover:shadow-xl ${
-                isRunning
-                  ? 'bg-red-600 hover:bg-red-700 hover:scale-105'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 hover:scale-105'
-              } ${status === 'error' ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {isRunning ? '⏹ Stop Chat Logger' : '▶ Start Chat Logger'}
-            </button>
-
-            {/* Cancel TTS Button - Only show in API mode when running */}
-            {connectionMode === 'api' && isRunning && (
-              <button
-                onClick={cancelAllTTS}
-                className="w-full py-2 sm:py-3 rounded-xl font-semibold text-sm sm:text-base transition-all bg-orange-600 hover:bg-orange-700 hover:scale-105 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-                Cancel All TTS
-              </button>
-            )}
-
-            {/* Status */}
-            <div className={`text-center py-3 rounded-lg ${
-              status === 'running' ? 'bg-green-500/20 text-green-400' :
-              status === 'error' ? 'bg-red-500/20 text-red-400' :
-              'bg-gray-800 text-gray-400'
-            }`}>
-              Status: {status.charAt(0).toUpperCase() + status.slice(1)}
-            </div>
-          </div>
-        </div>
-
-        {/* Live Chat Display - Always Visible */}
-        <div className="mt-8">
-          <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 card-hover">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
-              <h2 className="text-xl sm:text-2xl font-bold">Live Chat</h2>
-              <div className="flex items-center gap-2">
-                {isRunning && <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>}
-                <span className="text-sm text-gray-400">
-                  {messages.length} message{messages.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-gray-950 rounded-lg p-3 sm:p-4 h-[400px] sm:h-[500px] overflow-y-auto" id="chat-container">
-              {messages.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  <div className="text-center">
-                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                    </svg>
-                    <p className="text-lg font-medium mb-2">
-                      {isRunning ? 'Waiting for messages...' : 'Start chat logger to see messages'}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {isRunning ? 'Messages will appear here as they arrive' : 'Enable a platform and click "Start Chat Logger" above'}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className="flex items-start gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors animate-fadeIn"
-                    >
-                      {/* Platform Badge */}
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
-                        msg.platform === 'twitch' ? 'bg-twitch' :
-                        msg.platform === 'youtube' ? 'bg-youtube' :
-                        'bg-kick'
-                      }`}>
-                        {msg.platform === 'twitch' && (
-                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
-                          </svg>
-                        )}
-                        {msg.platform === 'youtube' && (
-                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                          </svg>
-                        )}
-                        {msg.platform === 'kick' && (
-                          <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2L2 7v10l10 5 10-5V7l-10-5zm0 2.18L19.82 8 12 11.82 4.18 8 12 4.18zM4 9.81l7 3.5v7.38l-7-3.5V9.81zm9 10.88v-7.38l7-3.5v7.38l-7 3.5z"/>
-                          </svg>
-                        )}
-                      </div>
-
-                      {/* Message Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <span className={`font-semibold ${
-                            msg.platform === 'twitch' ? 'text-twitch' :
-                            msg.platform === 'youtube' ? 'text-youtube' :
-                            'text-kick'
-                          }`}>
-                            {msg.username}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(msg.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-gray-200 break-words">{msg.message}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
