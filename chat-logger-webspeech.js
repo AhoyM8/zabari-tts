@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { buildUrlsFromPlatforms } = require('./lib/url-builder');
 
 /**
  * Multi-platform chat logger with Web Speech API TTS
@@ -23,15 +24,8 @@ function loadConfig() {
     try {
       const dynamicConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-      // Build URLs object from platforms
-      const urls = {};
-      if (dynamicConfig.platforms) {
-        Object.keys(dynamicConfig.platforms).forEach(platform => {
-          if (dynamicConfig.platforms[platform].enabled) {
-            urls[platform] = dynamicConfig.platforms[platform].url;
-          }
-        });
-      }
+      // Build URLs object from platforms using the URL builder utility
+      const urls = buildUrlsFromPlatforms(dynamicConfig.platforms || {});
 
       return {
         urls,
@@ -59,13 +53,15 @@ function loadConfig() {
     }
   }
 
-  // Default configuration
+  // Default configuration using URL builder
+  const defaultPlatforms = {
+    twitch: { enabled: true, username: 'zabariyarin' },
+    youtube: { enabled: true, videoId: 'zabariyarin' }, // Can be video ID or @username
+    kick: { enabled: true, username: 'zabariyarin' }
+  };
+
   return {
-    urls: {
-      twitch: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=',
-      youtube: 'https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU',
-      kick: 'https://kick.com/popout/zabariyarin/chat'
-    },
+    urls: buildUrlsFromPlatforms(defaultPlatforms),
     tts: {
       enabled: true,
       voice: 'Microsoft David - English (United States)',
@@ -500,7 +496,67 @@ async function main() {
   // Create and navigate pages only for enabled platforms
   for (const platform of enabledPlatforms) {
     const page = await context.newPage();
-    await page.goto(CONFIG.urls[platform]);
+    const url = CONFIG.urls[platform];
+    await page.goto(url);
+
+    // Special handling for YouTube channels (not direct video URLs)
+    if (platform === 'youtube' && url.includes('youtube.com/@')) {
+      console.log('YouTube channel detected. Navigating to live stream...');
+
+      try {
+        // Wait for page to load
+        await page.waitForTimeout(3000);
+
+        // Look for live stream - try multiple selectors
+        const liveSelectors = [
+          'a[href*="/watch?v="] ytd-thumbnail-overlay-time-status-renderer[overlay-style="LIVE"]',
+          'ytd-video-renderer:has-text("LIVE")',
+          'ytd-grid-video-renderer:has-text("LIVE")',
+          'a:has-text("LIVE")'
+        ];
+
+        let liveStreamFound = false;
+
+        for (const selector of liveSelectors) {
+          try {
+            const liveElement = await page.locator(selector).first();
+            if (await liveElement.isVisible({ timeout: 2000 })) {
+              // Found the live stream, get the link
+              const videoLink = await liveElement.locator('xpath=ancestor::a[contains(@href, "/watch?v=")]').first();
+              const href = await videoLink.getAttribute('href');
+
+              if (href) {
+                // Extract video ID
+                const match = href.match(/[?&]v=([^&]+)/);
+                if (match && match[1]) {
+                  const videoId = match[1];
+                  console.log(`Found live video ID: ${videoId}`);
+
+                  // Navigate to live chat
+                  const chatUrl = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
+                  await page.goto(chatUrl);
+                  console.log(`Navigated to live chat: ${chatUrl}`);
+                  liveStreamFound = true;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // Try next selector
+            continue;
+          }
+        }
+
+        if (!liveStreamFound) {
+          console.log('Warning: Could not find live stream on channel. Chat monitoring may not work.');
+        }
+
+      } catch (error) {
+        console.error('Error navigating to YouTube live stream:', error.message);
+        console.log('Continuing with channel page...');
+      }
+    }
+
     pages[platform] = page;
     console.log(`Opened ${platform} chat`);
   }

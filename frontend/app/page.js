@@ -8,11 +8,11 @@ import ElectronTTSManager from './components/ElectronTTSManager'
 export default function Home() {
   // TTS Manager ref for controlling TTS
   const ttsManagerRef = useRef(null)
-  // Chat platform states
+  // Chat platform states (now stores usernames/identifiers instead of full URLs)
   const [platforms, setPlatforms] = useState({
-    twitch: { enabled: false, url: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=' },
-    youtube: { enabled: false, url: 'https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU' },
-    kick: { enabled: false, url: 'https://kick.com/popout/zabariyarin/chat' }
+    twitch: { enabled: false, username: 'zabariyarin' },
+    youtube: { enabled: false, videoId: 'zabariyarin' }, // Can be video ID or @username
+    kick: { enabled: false, username: 'zabariyarin' }
   })
 
   // TTS engine selection
@@ -132,12 +132,15 @@ export default function Home() {
     }))
   }
 
-  // Update platform URL
-  const updatePlatformUrl = (platform, url) => {
-    setPlatforms(prev => ({
-      ...prev,
-      [platform]: { ...prev[platform], url }
-    }))
+  // Update platform identifier (username or videoId)
+  const updatePlatformIdentifier = (platform, value) => {
+    setPlatforms(prev => {
+      const field = platform === 'youtube' ? 'videoId' : 'username'
+      return {
+        ...prev,
+        [platform]: { ...prev[platform], [field]: value }
+      }
+    })
   }
 
   // Start/Stop chat logger
@@ -295,10 +298,10 @@ export default function Home() {
                 {platforms.twitch.enabled && (
                   <input
                     type="text"
-                    value={platforms.twitch.url}
-                    onChange={(e) => updatePlatformUrl('twitch', e.target.value)}
+                    value={platforms.twitch.username}
+                    onChange={(e) => updatePlatformIdentifier('twitch', e.target.value)}
                     className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-twitch text-sm"
-                    placeholder="Twitch chat URL"
+                    placeholder="Enter Twitch username (e.g., xqc)"
                   />
                 )}
               </div>
@@ -333,10 +336,10 @@ export default function Home() {
                 {platforms.youtube.enabled && (
                   <input
                     type="text"
-                    value={platforms.youtube.url}
-                    onChange={(e) => updatePlatformUrl('youtube', e.target.value)}
+                    value={platforms.youtube.videoId}
+                    onChange={(e) => updatePlatformIdentifier('youtube', e.target.value)}
                     className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-youtube text-sm"
-                    placeholder="YouTube live chat URL"
+                    placeholder="Video ID or channel username (e.g., dQw4w9WgXcQ or @username)"
                   />
                 )}
               </div>
@@ -371,10 +374,10 @@ export default function Home() {
                 {platforms.kick.enabled && (
                   <input
                     type="text"
-                    value={platforms.kick.url}
-                    onChange={(e) => updatePlatformUrl('kick', e.target.value)}
+                    value={platforms.kick.username}
+                    onChange={(e) => updatePlatformIdentifier('kick', e.target.value)}
                     className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-kick text-sm"
-                    placeholder="Kick chat URL"
+                    placeholder="Enter Kick username (e.g., trainwreckstv)"
                   />
                 )}
               </div>
