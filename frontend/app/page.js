@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'react-toastify'
 import TTSManager from './components/TTSManager'
 import ElectronTTSManager from './components/ElectronTTSManager'
@@ -101,7 +101,9 @@ export default function Home() {
         if (voices.length > 0) {
           if (!ttsConfig.voice) {
             const defaultVoice = english[0] || voices[0]
-            setTtsConfig(prev => ({ ...prev, voice: defaultVoice.name }))
+            if (defaultVoice) {
+              setTtsConfig(prev => ({ ...prev, voice: defaultVoice.name }))
+            }
           }
           if (!ttsConfig.englishVoice && english.length > 0) {
             setTtsConfig(prev => ({ ...prev, englishVoice: english[0].name }))
@@ -232,12 +234,17 @@ export default function Home() {
     }
   }
 
+  // Memoized callback to prevent re-renders
+  const handleServerStatusChange = useCallback((status) => {
+    console.log('[TTS Server Status]', status)
+  }, [])
+
   return (
     <main className="min-h-screen p-4 sm:p-6 lg:p-8">
       {/* Electron TTS Server Manager - Auto-starts TTS servers in Electron */}
       <ElectronTTSManager
         ttsEngine={ttsEngine}
-        onServerStatusChange={(status) => console.log('[TTS Server Status]', status)}
+        onServerStatusChange={handleServerStatusChange}
       />
 
       {/* TTS Manager for API mode - only active when using API connection */}

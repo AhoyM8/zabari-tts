@@ -25,13 +25,19 @@ export default function ElectronTTSManager({ ttsEngine, onServerStatusChange }) 
 
   // Check dependencies and auto-start server when engine changes
   useEffect(() => {
-    if (!isElectron || !ttsEngine || ttsEngine === 'webspeech') {
+    if (!isElectron || !ttsEngine || ttsEngine === 'webspeech' || !window.electron?.tts) {
       setNeedsSetup(false)
-      return // Web Speech API doesn't need a server
+      return // Web Speech API doesn't need a server or electron not available
     }
 
     const checkAndStart = async () => {
       try {
+        // Safety check before calling electron API
+        if (!window.electron?.tts?.checkDependencies) {
+          console.warn('[Electron TTS] Electron TTS API not available')
+          return
+        }
+
         // First check dependencies
         console.log('[Electron TTS] Checking dependencies for:', ttsEngine)
         const depCheck = await window.electron.tts.checkDependencies(ttsEngine)
@@ -80,10 +86,13 @@ export default function ElectronTTSManager({ ttsEngine, onServerStatusChange }) 
 
   // Periodically check server status
   useEffect(() => {
-    if (!isElectron) return
+    if (!isElectron || !window.electron?.tts?.getStatus) return
 
     const checkStatus = async () => {
       try {
+        // Safety check before calling
+        if (!window.electron?.tts?.getStatus) return
+
         const result = await window.electron.tts.getStatus()
         if (result.success) {
           setServerStatus(result.status)
@@ -104,15 +113,30 @@ export default function ElectronTTSManager({ ttsEngine, onServerStatusChange }) 
 
   // Listen for setup progress
   useEffect(() => {
-    if (!isElectron) return
+    if (!isElectron || !window.electron?.tts?.onSetupProgress) return
 
-    window.electron.tts.onSetupProgress((message) => {
-      setSetupProgress(message)
-    })
+    try {
+      const cleanup = window.electron.tts.onSetupProgress((message) => {
+        setSetupProgress(message)
+      })
+
+      return () => {
+        if (typeof cleanup === 'function') {
+          cleanup()
+        }
+      }
+    } catch (error) {
+      console.error('[Electron TTS] Error setting up progress listener:', error)
+    }
   }, [isElectron])
 
   // Handle setup button click
   const handleSetup = async () => {
+    if (!window.electron?.tts?.setupDependencies) {
+      console.error('[Electron TTS] Setup API not available')
+      return
+    }
+
     setIsSettingUp(true)
     setSetupProgress('Starting setup...')
 
@@ -125,6 +149,7 @@ export default function ElectronTTSManager({ ttsEngine, onServerStatusChange }) 
 
         // Recheck dependencies
         setTimeout(async () => {
+          if (!window.electron?.tts?.checkDependencies) return
           const checkResult = await window.electron.tts.checkDependencies(ttsEngine)
           if (checkResult.success && checkResult.exists && checkResult.hasPackages) {
             setSetupProgress('')
