@@ -206,13 +206,6 @@ export default function ElectronTTSManager({ ttsEngine, onServerStatusChange }) 
       {serverStatus && !needsSetup && !isSettingUp && (
         <div className="space-y-1">
           <div className={`flex items-center justify-between ${
-            serverStatus.neutts.reachable ? 'text-green-400' : 'text-gray-500'
-          }`}>
-            <span>NeuTTS (8765):</span>
-            <span>{serverStatus.neutts.reachable ? '✓ Running' : '○ Stopped'}</span>
-          </div>
-
-          <div className={`flex items-center justify-between ${
             serverStatus.kokoro.reachable ? 'text-green-400' : 'text-gray-500'
           }`}>
             <span>Kokoro (8766):</span>

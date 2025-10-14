@@ -49,9 +49,8 @@ Perfect for sharing with non-technical users! 🚀
   - **Playwright Mode**: Browser automation for local development
   - **API Mode**: Direct API connections (Vercel-compatible, no browser needed)
 - **Modern Web Interface**: Next.js frontend with real-time chat display and configuration
-- **Three TTS Engines**:
+- **Two TTS Engines**:
   - **Web Speech API**: Browser-based TTS (no server required)
-  - **NeuTTS Air**: AI voice cloning with custom voices
   - **Kokoro-82M**: Lightweight & fast AI TTS with 12 built-in voices
 
 ### Advanced TTS Features

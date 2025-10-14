@@ -92,10 +92,7 @@ async function startPlaywrightMode(config) {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
 
   // Determine which script to run
-  // Both NeuTTS and Kokoro use external TTS servers
-  const scriptName = (config.ttsEngine === 'neutts' || config.ttsEngine === 'kokoro')
-    ? 'chat-logger-tts.js'
-    : 'chat-logger-webspeech.js'
+  const scriptName = 'chat-logger-webspeech.js'
 
   const scriptPath = path.join(basePath, scriptName)
 

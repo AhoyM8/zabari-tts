@@ -483,8 +483,11 @@ async function main() {
   fs.writeFileSync(pidPath, process.pid.toString());
 
   const browser = await chromium.launch({
-    headless: true,
-    args: ['--enable-speech-dispatcher'] // Enable speech on Linux
+    headless: false, // MUST be false for Web Speech API to produce audio!
+    args: [
+      '--enable-speech-dispatcher', // Enable speech on Linux
+      '--autoplay-policy=no-user-gesture-required' // Allow audio autoplay
+    ]
   });
 
   const context = await browser.newContext();

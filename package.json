@@ -53,7 +53,6 @@
       "electron-preload.js",
       "assets/**/*",
       "chat-logger-webspeech.js",
-      "chat-logger-tts.js",
       "lib/**/*",
       "node_modules/**/*",
       "!node_modules/.cache/**/*",
@@ -91,19 +90,6 @@
           "!.venv/**/*",
           "!venv/**/*",
           "!test_output.log"
-        ]
-      },
-      {
-        "from": "neutts-air",
-        "to": "neutts-air",
-        "filter": [
-          "tts-server.py",
-          "requirements.txt",
-          "samples/**/*",
-          "!*.pyc",
-          "!__pycache__",
-          "!.venv/**/*",
-          "!venv/**/*"
         ]
       }
     ],

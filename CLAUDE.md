@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-platform chat logger with real-time text-to-speech (TTS) for live streaming. Monitors Twitch, YouTube, and Kick chats using two connection methods: **Playwright browser automation** (local) or **Direct API connections** (Vercel-compatible). Features a modern Next.js web interface with live chat display and supports three TTS engines: Web Speech API (browser-based), NeuTTS Air (AI voice cloning), and Kokoro-82M (lightweight & fast AI TTS).
+Multi-platform chat logger with real-time text-to-speech (TTS) for live streaming. Monitors Twitch, YouTube, and Kick chats using two connection methods: **Playwright browser automation** (local) or **Direct API connections** (Vercel-compatible). Features a modern Next.js web interface with live chat display and supports two TTS engines: Web Speech API (browser-based) and Kokoro-82M (lightweight & fast AI TTS).
 
 **NEW**: Dual connection mode allows deployment to Vercel and other serverless platforms without Playwright dependencies!
 
@@ -23,7 +23,7 @@ The web interface allows you to:
 - **Choose connection method**: Playwright (browser automation) or API (direct connections)
 - Toggle Twitch, YouTube, and Kick chats individually
 - Configure custom chat URLs for each platform
-- Choose between Web Speech API, NeuTTS Air, and Kokoro-82M TTS engines
+- Choose between Web Speech API and Kokoro-82M TTS engines
 - Adjust TTS settings (volume, rate, pitch, speed, voice selection, filters)
 - View live chat messages from all platforms in real-time
 
@@ -32,20 +32,6 @@ The web interface allows you to:
 **Chat Logger with Web Speech API TTS:**
 ```bash
 node chat-logger-webspeech.js
-```
-
-**Chat Logger with NeuTTS Air:**
-**Terminal 1 - Start TTS Server:**
-```bash
-cd neutts-air
-.venv/Scripts/python tts-server.py  # Windows
-# OR
-source .venv/bin/activate && python tts-server.py  # Linux/Mac
-```
-
-**Terminal 2 - Start Chat Logger:**
-```bash
-node chat-logger-tts.js
 ```
 
 **Chat Logger with Kokoro-82M:**
@@ -65,11 +51,6 @@ source .venv/bin/activate && python tts-server.py
 source .venv/bin/activate && python tts-server.py --device cuda
 ```
 
-**Terminal 2 - Start Chat Logger:**
-```bash
-node chat-logger-tts.js
-```
-
 ### Dependencies
 ```bash
 # Node.js (root directory)
@@ -79,12 +60,7 @@ npm install
 cd frontend
 npm install
 
-# Python TTS Servers (optional - only for NeuTTS Air or Kokoro)
-# NeuTTS Air
-cd neutts-air
-uv venv
-uv pip install -r requirements.txt
-
+# Python TTS Server (optional - only for Kokoro)
 # Kokoro-82M
 cd kokoro-tts
 uv venv
@@ -112,9 +88,9 @@ uv pip install -r requirements.txt
 ### Three-Tier Architecture
 1. **Next.js Frontend** (`frontend/`) - Modern web UI for configuration and live chat display
 2. **Chat Connection Layer**:
-   - **Playwright Mode**: `chat-logger-webspeech.js` or `chat-logger-tts.js` - Browser automation
+   - **Playwright Mode**: `chat-logger-webspeech.js` - Browser automation
    - **API Mode**: `lib/chat-api/` - Direct chat API clients (TMI.js for Twitch, Pusher for Kick, YouTube Data API)
-3. **TTS Engine** - Web Speech API (browser), NeuTTS Air (`neutts-air/tts-server.py`), or Kokoro-82M (`kokoro-tts/tts-server.py`)
+3. **TTS Engine** - Web Speech API (browser) or Kokoro-82M (`kokoro-tts/tts-server.py`)
 
 ### Chat Message Flow (API Mode)
 
@@ -172,15 +148,7 @@ uv pip install -r requirements.txt
 - **Voice Selection**: Choose from all available system voices
 - **Multi-Language Support**: Auto-detect Hebrew/English and switch voices dynamically
 
-**NeuTTS Air (chat-logger-tts.js):**
-- **Model**: NeuTTS Air (quantized GGUF format for CPU inference)
-- **Voice Cloning**: Requires reference audio (3-15 seconds) + transcript in `neutts-air/samples/`
-- **Caching**: Reference audio encoded once per voice and cached in memory
-- **Queue System**: Messages queued to prevent overwhelming TTS server (100ms delay between requests)
-- **Output**: 24kHz WAV files saved to `audio_output/`
-- **Server**: Port 8765 (default)
-
-**Kokoro-82M (chat-logger-tts.js):**
+**Kokoro-82M:**
 - **Model**: Kokoro-82M (82 million parameter lightweight TTS model)
 - **Built-in Voices**: 12 pre-trained voices (American/British, Male/Female)
 - **Voice Options**:
@@ -243,14 +211,13 @@ uv pip install -r requirements.txt
 All configuration can be done through the web UI at http://localhost:3000:
 - **Connection Method**: Choose between Playwright (browser) or API (direct connections)
 - **Chat URLs**: Enable/disable platforms and customize URLs per platform
-- **TTS Engine**: Switch between Web Speech API, NeuTTS Air, and Kokoro-82M
+- **TTS Engine**: Switch between Web Speech API and Kokoro-82M
 - **TTS Settings**:
   - **Single Voice Mode**: Select one voice for all messages
   - **Auto-Detect Language Mode**: Automatically switch between Hebrew and English voices (Web Speech only)
-  - Adjust volume, rate, pitch (Web Speech), voice name (NeuTTS), or voice/speed (Kokoro)
+  - Adjust volume, rate, pitch (Web Speech) or voice/speed (Kokoro)
 - **Voice Selection**:
   - **Web Speech API**: Choose from all available system voices, filter by language
-  - **NeuTTS Air**: Enter custom voice name (requires voice sample in `neutts-air/samples/`)
   - **Kokoro-82M**: Select from 12 built-in voices via dropdown, adjust speed
 - **Message Filtering**: Exclude commands, links, and specific usernames
 - **YouTube API Key**: Required for YouTube in API mode (optional in Playwright mode)
@@ -271,14 +238,8 @@ urls: {
 }
 ```
 
-**Changing TTS Voice** for NeuTTS in `chat-logger-tts.js` line 8:
-```javascript
-const TTS_VOICE = 'dave'; // or 'jo', or any voice in samples/
-```
-
-**Adding Custom Voices** for NeuTTS - place files in `neutts-air/samples/`:
-- `myvoice.wav` - 3-15 seconds of clean speech
-- `myvoice.txt` - exact transcript of the audio
+**Changing TTS Voice** for Kokoro in the web UI:
+Select from 12 built-in voices and adjust speed (0.5x to 2x)
 
 ## Key Implementation Notes
 
@@ -308,11 +269,6 @@ The system uses two separate message buffers:
 - Prevents stale messages when switching between modes
 
 ### TTS Server Endpoints
-
-**NeuTTS Air (Port 8765):**
-- `POST /synthesize` - Accepts `{text, voice}`, returns WAV audio
-- `GET /health` - Server status check
-- `GET /voices` - Lists available voice samples
 
 **Kokoro-82M (Port 8766):**
 - `POST /synthesize` - Accepts `{text, voice, speed}`, returns WAV audio
