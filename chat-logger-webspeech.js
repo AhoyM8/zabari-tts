@@ -64,7 +64,7 @@ function loadConfig() {
     urls: {
       twitch: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=',
       youtube: 'https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU',
-      kick: 'https://kick.com/popout/xqc/chat'
+      kick: 'https://kick.com/popout/zabariyarin/chat'
     },
     tts: {
       enabled: true,
@@ -483,7 +483,7 @@ async function main() {
   fs.writeFileSync(pidPath, process.pid.toString());
 
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     args: ['--enable-speech-dispatcher'] // Enable speech on Linux
   });
 

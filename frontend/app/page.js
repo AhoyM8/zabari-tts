@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'react-toastify'
 import TTSManager from './components/TTSManager'
+import ElectronTTSManager from './components/ElectronTTSManager'
 
 export default function Home() {
   // TTS Manager ref for controlling TTS
@@ -11,7 +12,7 @@ export default function Home() {
   const [platforms, setPlatforms] = useState({
     twitch: { enabled: false, url: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=' },
     youtube: { enabled: false, url: 'https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU' },
-    kick: { enabled: false, url: 'https://kick.com/popout/xqc/chat' }
+    kick: { enabled: false, url: 'https://kick.com/popout/zabariyarin/chat' }
   })
 
   // TTS engine selection
@@ -233,6 +234,12 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-4 sm:p-6 lg:p-8">
+      {/* Electron TTS Server Manager - Auto-starts TTS servers in Electron */}
+      <ElectronTTSManager
+        ttsEngine={ttsEngine}
+        onServerStatusChange={(status) => console.log('[TTS Server Status]', status)}
+      />
+
       {/* TTS Manager for API mode - only active when using API connection */}
       {connectionMode === 'api' && isRunning && (
         <TTSManager

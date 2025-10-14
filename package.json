@@ -1,12 +1,27 @@
 {
   "name": "zabari-tts",
   "version": "1.0.0",
-  "description": "",
-  "main": "chat-logger.js",
+  "description": "Multi-platform chat logger with TTS for live streaming",
+  "main": "electron-main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "electron": "electron .",
+    "electron:dev": "electron . --dev",
+    "build:frontend": "cd frontend && npm run build",
+    "prepare:electron": "node scripts/build/prepare-electron.js",
+    "pack": "npm run build:frontend && npm run prepare:electron && electron-builder --dir",
+    "dist": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64",
+    "dist:portable": "npm run build:frontend && npm run prepare:electron && electron-builder --win portable",
+    "generate-icons": "node scripts/build/generate-icons-from-any.js"
   },
-  "keywords": [],
+  "keywords": [
+    "tts",
+    "chat",
+    "twitch",
+    "youtube",
+    "kick",
+    "streaming"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -15,5 +30,112 @@
     "playwright": "^1.56.0",
     "pusher-js": "^8.4.0",
     "tmi.js": "^1.8.5"
+  },
+  "devDependencies": {
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12",
+    "fs-extra": "^11.3.2",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.4",
+    "svg2img": "^1.0.0-beta.2"
+  },
+  "build": {
+    "appId": "com.zabari.tts",
+    "productName": "Zabari TTS",
+    "copyright": "Copyright © 2025",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "asar": false,
+    "files": [
+      "electron-main.js",
+      "electron-preload.js",
+      "assets/**/*",
+      "chat-logger-webspeech.js",
+      "chat-logger-tts.js",
+      "lib/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache/**/*",
+      "!node_modules/fsevents/**/*",
+      "!node_modules/@esbuild/darwin-*/**/*",
+      "!node_modules/@esbuild/linux-*/**/*",
+      "frontend/.next/**/*",
+      "frontend/public/**/*",
+      "frontend/node_modules/**/*",
+      "frontend/package.json",
+      "!frontend/node_modules/.cache/**/*",
+      "!frontend/node_modules/fsevents/**/*",
+      "!frontend/node_modules/@esbuild/darwin-*/**/*",
+      "!frontend/node_modules/@esbuild/linux-*/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "python-embedded",
+        "to": "python-embedded",
+        "filter": [
+          "**/*",
+          "!**/*.pyc",
+          "!**/__pycache__/**",
+          "!**/tests/**",
+          "!**/test/**"
+        ]
+      },
+      {
+        "from": "kokoro-tts",
+        "to": "kokoro-tts",
+        "filter": [
+          "**/*",
+          "!*.pyc",
+          "!__pycache__",
+          "!.venv/**/*",
+          "!venv/**/*",
+          "!test_output.log"
+        ]
+      },
+      {
+        "from": "neutts-air",
+        "to": "neutts-air",
+        "filter": [
+          "tts-server.py",
+          "requirements.txt",
+          "samples/**/*",
+          "!*.pyc",
+          "!__pycache__",
+          "!.venv/**/*",
+          "!venv/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signtoolOptions": null,
+      "signAndEditExecutable": false,
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Zabari TTS"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   }
 }

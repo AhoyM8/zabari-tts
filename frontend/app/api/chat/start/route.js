@@ -50,8 +50,45 @@ async function startPlaywrightMode(config) {
   // Set connection mode for message routing
   setConnectionMode('playwright')
 
+  // Determine base path (handle both dev and production)
+  // In packaged Electron standalone server: process.cwd() = .../resources/app/frontend/.next/standalone
+  //   chat-logger files are in: .../resources/app/
+  // In dev Electron: process.cwd() = project root
+  // In standalone Next.js: process.cwd() = .../frontend/.next/standalone
+
+  const cwd = process.cwd();
+  console.log('[Playwright Mode] process.cwd():', cwd);
+  console.log('[Playwright Mode] __dirname:', __dirname);
+
+  let basePath;
+
+  // Check if running in standalone server (production or dev)
+  if (cwd.includes('.next') && cwd.includes('standalone')) {
+    // We're in .../frontend/.next/standalone or .../app/frontend/.next/standalone
+
+    // Check if we're in a packaged Electron app (path contains resources/app)
+    if (cwd.includes('resources') && cwd.includes('app')) {
+      // Packaged Electron: .../resources/app/frontend/.next/standalone
+      // Go up 3 levels to reach resources/app/
+      basePath = path.join(cwd, '..', '..', '..');
+    } else {
+      // Dev standalone: .../frontend/.next/standalone
+      // Go up 3 levels to reach project root
+      basePath = path.join(cwd, '..', '..', '..');
+    }
+  } else {
+    // Development mode: cwd might be project root or frontend directory
+    basePath = cwd;
+    // If we're in the frontend directory, go up one level to reach project root
+    if (basePath.endsWith('frontend') || basePath.endsWith('frontend\\') || basePath.endsWith('frontend/')) {
+      basePath = path.join(basePath, '..');
+    }
+  }
+
+  console.log('[Playwright Mode] basePath:', basePath);
+
   // Create dynamic config file
-  const configPath = path.join(process.cwd(), '..', 'dynamic-config.json')
+  const configPath = path.join(basePath, 'dynamic-config.json')
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
 
   // Determine which script to run
@@ -60,11 +97,22 @@ async function startPlaywrightMode(config) {
     ? 'chat-logger-tts.js'
     : 'chat-logger-webspeech.js'
 
-  const scriptPath = path.join(process.cwd(), '..', scriptName)
+  const scriptPath = path.join(basePath, scriptName)
+
+  console.log('[Playwright Mode] scriptPath:', scriptPath);
+  console.log('[Playwright Mode] script exists:', fs.existsSync(scriptPath));
+
+  // Check if script exists
+  if (!fs.existsSync(scriptPath)) {
+    return NextResponse.json({
+      success: false,
+      error: `Chat logger script not found at: ${scriptPath}`
+    }, { status: 500 })
+  }
 
   // Start the chat logger process
   chatProcess = spawn('node', [scriptPath], {
-    cwd: path.join(process.cwd(), '..'),
+    cwd: basePath,
     env: {
       ...process.env,
       ZABARI_CONFIG: configPath

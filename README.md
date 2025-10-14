@@ -2,6 +2,45 @@
 
 Real-time chat monitoring and text-to-speech system for Twitch, YouTube, and Kick live streams. Features dual connection modes (Playwright/API), modern web interface, and advanced multi-language TTS support.
 
+## 📦 Distribution - Standalone Desktop App
+
+Want to share this app with a friend without requiring Python, Node.js, or any technical setup?
+
+### 🎉 NEW: Fully Standalone Build with Embedded AI Voices!
+
+**Your app now includes:**
+- ✅ **Embedded Python** - No Python installation needed!
+- ✅ **Kokoro AI TTS Built-in** - 12 professional voices ready to use
+- ✅ **All dependencies bundled** - PyTorch, Node.js, everything included
+- ✅ **True one-click install** - Download, install, done!
+
+**Quick Build:**
+```bash
+# Test embedded Python
+node scripts/test-embedded-python.js
+
+# Build standalone app
+npm run dist
+```
+
+**Result:** A 2.1GB installer with **everything included** - users just install and use AI voices immediately!
+
+### 📚 Documentation
+- **[BUILD_STANDALONE.md](docs/build/BUILD_STANDALONE.md)** - Quick build guide (start here!)
+- **[STANDALONE_COMPLETE.md](docs/guides/STANDALONE_COMPLETE.md)** - Complete technical details
+- **[BUILD_GUIDE.md](docs/build/BUILD_GUIDE.md)** - Original build instructions
+- **[ELECTRON_README.md](docs/electron/ELECTRON_README.md)** - Electron app overview
+
+### What Users Get
+- **Double-click installation** (NSIS installer)
+- **Portable .exe option** (no installation needed)
+- **System tray integration** with easy controls
+- **Web Speech API** - Instant Windows voices
+- **Kokoro TTS** - AI voices work immediately (no Python setup!)
+- **Desktop shortcuts** and Start Menu entry
+
+Perfect for sharing with non-technical users! 🚀
+
 ## Features
 
 ### Core Features

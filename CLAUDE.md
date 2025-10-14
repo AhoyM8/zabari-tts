@@ -334,9 +334,9 @@ The system uses two separate message buffers:
 - `lib/chat-api/index.js` - Client manager and coordinator
 
 ### Debugging Scripts
-- `inspect-kick.js` - Analyzes Kick DOM structure
-- `inspect-kick-detailed.js` - Detailed HTML inspection
-- `debug-kick-mutations.js` - Logs mutation observer events
+- `scripts/debug/inspect-kick.js` - Analyzes Kick DOM structure
+- `scripts/debug/inspect-kick-detailed.js` - Detailed HTML inspection
+- `scripts/debug/debug-kick-mutations.js` - Logs mutation observer events
 
 ## Frontend Stack
 - **Framework**: Next.js 15 (App Router)

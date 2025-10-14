@@ -54,7 +54,7 @@ function loadConfig() {
     urls: {
       twitch: 'https://www.twitch.tv/popout/zabariyarin/chat?popout=',
       youtube: 'https://www.youtube.com/live_chat?is_popout=1&v=S6ATuj2NnUU',
-      kick: 'https://kick.com/popout/xqc/chat'
+      kick: 'https://kick.com/popout/zabariyarin/chat'
     },
     ttsEngine: 'neutts',
     ttsServerUrl: 'http://localhost:8765',
@@ -83,6 +83,8 @@ const ttsQueue = [];
 let isProcessingQueue = false;
 
 async function synthesizeSpeech(text, platform, username, page) {
+  console.log(`\n🎤 [TTS] Processing: "${text}" (${platform}/${username})`);
+
   return new Promise((resolve, reject) => {
     // Build request payload based on TTS engine
     const payload = {
@@ -94,6 +96,9 @@ async function synthesizeSpeech(text, platform, username, page) {
     if (CONFIG.ttsEngine === 'kokoro' && CONFIG.ttsSpeed !== null) {
       payload.speed = CONFIG.ttsSpeed;
     }
+
+    console.log(`📤 [TTS] Sending request to ${CONFIG.ttsServerUrl}/synthesize`);
+    console.log(`   Payload:`, JSON.stringify(payload, null, 2));
 
     const postData = JSON.stringify(payload);
 
@@ -112,6 +117,7 @@ async function synthesizeSpeech(text, platform, username, page) {
     };
 
     const req = http.request(options, (res) => {
+      console.log(`📥 [TTS] Response status: ${res.statusCode}`);
       const chunks = [];
 
       res.on('data', (chunk) => {
@@ -121,6 +127,7 @@ async function synthesizeSpeech(text, platform, username, page) {
       res.on('end', async () => {
         if (res.statusCode === 200) {
           const audioBuffer = Buffer.concat(chunks);
+          console.log(`✓ [TTS] Received audio data: ${audioBuffer.length} bytes`);
 
           // Save audio file to disk
           const timestamp = Date.now();
@@ -128,13 +135,15 @@ async function synthesizeSpeech(text, platform, username, page) {
           const filepath = path.join(AUDIO_OUTPUT_DIR, filename);
 
           fs.writeFileSync(filepath, audioBuffer);
-          console.log(`🔊 TTS audio saved: ${filename}`);
+          console.log(`💾 [TTS] Audio saved: ${filename}`);
 
           // Play audio in browser using Web Audio API
           try {
+            console.log(`🔊 [TTS] Starting audio playback in browser...`);
             const base64Audio = audioBuffer.toString('base64');
             await page.evaluate((audioData) => {
               return new Promise((resolvePlay) => {
+                console.log('[Browser] Decoding audio data...');
                 const binaryString = atob(audioData);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
@@ -142,30 +151,32 @@ async function synthesizeSpeech(text, platform, username, page) {
                 }
 
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('[Browser] AudioContext created, state:', audioContext.state);
 
                 audioContext.decodeAudioData(bytes.buffer, (audioBuffer) => {
+                  console.log('[Browser] Audio decoded successfully! Duration:', audioBuffer.duration, 'seconds');
                   const source = audioContext.createBufferSource();
                   source.buffer = audioBuffer;
                   source.connect(audioContext.destination);
 
                   source.onended = () => {
-                    console.log('Audio playback finished');
+                    console.log('[Browser] ✓ Audio playback finished');
                     resolvePlay();
                   };
 
                   source.start(0);
-                  console.log('Playing TTS audio...');
+                  console.log('[Browser] 🔊 Audio playback started!');
                 }, (error) => {
-                  console.error('Error decoding audio:', error);
+                  console.error('[Browser] Error decoding audio:', error);
                   resolvePlay();
                 });
               });
             }, base64Audio);
 
-            console.log('✓ Audio played successfully');
+            console.log('✅ [TTS] Audio playback completed successfully!\n');
             resolve(filepath);
           } catch (error) {
-            console.error('Error playing audio:', error.message);
+            console.error('❌ [TTS] Error playing audio:', error.message);
             resolve(filepath); // Still resolve even if playback fails
           }
         } else {
@@ -206,8 +217,12 @@ async function processQueue() {
 
 function queueTTS(text, platform, username, page) {
   // Skip empty messages or very short ones
-  if (!text || text.trim().length < 2) return;
+  if (!text || text.trim().length < 2) {
+    console.log(`⏭️  [TTS] Skipping message (too short): "${text}"`);
+    return;
+  }
 
+  console.log(`➕ [TTS] Added to queue: "${text}" (Queue size: ${ttsQueue.length + 1})`);
   ttsQueue.push({ text, platform, username, page });
   processQueue();
 }
@@ -230,19 +245,20 @@ async function checkTTSServer() {
 }
 
 async function logChatMessages() {
-  // Check if TTS server is running
+  // Check if TTS server is running (initial check only for user feedback)
   console.log('Checking TTS server...');
-  const ttsServerRunning = await checkTTSServer();
+  const ttsServerInitiallyRunning = await checkTTSServer();
 
-  if (!ttsServerRunning) {
-    console.warn('\n⚠️  Warning: TTS server is not running!');
-    console.warn(`Start the ${CONFIG.ttsEngine.toUpperCase()} TTS server`);
-    console.warn('Chat messages will be logged but not converted to speech.\n');
+  if (!ttsServerInitiallyRunning) {
+    console.warn('\n⚠️  Warning: TTS server is not running at startup!');
+    console.warn(`Start the ${CONFIG.ttsEngine.toUpperCase()} TTS server to enable TTS.`);
+    console.warn('Chat messages will be logged. If TTS server starts later, it will be used automatically.\n');
   } else {
     console.log(`✓ ${CONFIG.ttsEngine.toUpperCase()} TTS server is running\n`);
   }
 
   // Launch browser with headed mode to see the chats and enable audio playback
+  // IMPORTANT: Must be headless: false for audio to actually play through speakers!
   const browser = await chromium.launch({
     headless: false,
     args: ['--start-maximized', '--autoplay-policy=no-user-gesture-required', '--enable-audio-service-sandbox=false']
@@ -384,9 +400,8 @@ async function logChatMessages() {
       console.log(`TWITCH:${username}:${message}`);
       console.log(`[Twitch Chat] ${username}: ${message}`);
 
-      if (ttsServerRunning) {
-        queueTTS(message, 'twitch', username, twitchPage);
-      }
+      // Always try to send to TTS (will fail gracefully if server not available)
+      queueTTS(message, 'twitch', username, twitchPage);
     }
   });
   }
@@ -404,9 +419,8 @@ async function logChatMessages() {
       console.log(`YOUTUBE:${username}:${message}`);
       console.log(`[YouTube Chat] ${username}: ${message}`);
 
-      if (ttsServerRunning) {
-        queueTTS(message, 'youtube', username, youtubePage);
-      }
+      // Always try to send to TTS (will fail gracefully if server not available)
+      queueTTS(message, 'youtube', username, youtubePage);
     }
   });
   }
@@ -470,9 +484,8 @@ async function logChatMessages() {
       console.log(`KICK:${username}:${message}`);
       console.log(`[Kick Chat] ${username}: ${message}`);
 
-      if (ttsServerRunning) {
-        queueTTS(message, 'kick', username, kickPage);
-      }
+      // Always try to send to TTS (will fail gracefully if server not available)
+      queueTTS(message, 'kick', username, kickPage);
     }
   });
   }

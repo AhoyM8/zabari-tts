@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 
 async function inspectKickChat() {
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     args: ['--start-maximized']
   });
 

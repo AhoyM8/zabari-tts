@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Error - Zabari TTS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+
+        .container {
+            text-align: center;
+            padding: 40px;
+            max-width: 600px;
+        }
+
+        .error-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        p {
+            font-size: 18px;
+            margin-bottom: 15px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .suggestions {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .suggestions h2 {
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        .suggestions ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .suggestions li {
+            padding: 8px 0;
+            opacity: 0.9;
+        }
+
+        .suggestions li::before {
+            content: "→ ";
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">⚠️</div>
+        <h1>Failed to Start Server</h1>
+        <p>The application server could not start. This might be due to:</p>
+
+        <div class="suggestions">
+            <h2>Possible Solutions:</h2>
+            <ul>
+                <li>Port 3000 might already be in use</li>
+                <li>Missing dependencies or corrupted installation</li>
+                <li>Insufficient permissions</li>
+            </ul>
+        </div>
+
+        <p style="margin-top: 30px; font-size: 16px;">
+            Try right-clicking the system tray icon and selecting "Restart Server".<br>
+            If the problem persists, please restart the application.
+        </p>
+    </div>
+</body>
+</html>

@@ -1,33 +1,81 @@
 # Dependencies
 node_modules/
 frontend/node_modules/
+.venv/
+venv/
 neutts-air/.venv/
 neutts-air/venv/
+kokoro-tts/.venv/
+kokoro-tts/venv/
 
 # Build outputs
 frontend/.next/
 frontend/out/
 frontend/build/
 dist/
+out/
+release/
+
+# Electron build artifacts
+*.exe
+*.dmg
+*.snap
+*.AppImage
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# Electron builder cache
+.electron-builder-cache/
+
+# Python embedded (downloaded for standalone builds)
+python-embedded/
 
 # Audio outputs
 audio_output/
 *.wav
 *.mp3
+*.ogg
+*.flac
+
+# AI Model files and caches
+neutts-air/models/
+neutts-air/.cache/
+kokoro-tts/models/
+kokoro-tts/.cache/
+kokoro-tts/__pycache__/
+neutts-air/__pycache__/
 
 # Environment files
 .env
 .env.local
+.env.production.local
+.env.development.local
+.env.test.local
 .env.*.local
 
-# Dynamic config
+# Dynamic config and runtime files
 dynamic-config.json
 chat-logger.pid
+*.pid
+
+# Test outputs
+test-screenshots/
+test_output.log
+test_output.wav
+tests/*.wav
+tests/*.mp3
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-*.log
+Desktop.ini
 nul
 
 # IDE files
@@ -36,19 +84,57 @@ nul
 *.swp
 *.swo
 *~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Playwright
 .playwright-mcp/
 playwright-report/
 test-results/
+playwright/.cache/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Temporary files
 *.tmp
 temp/
 tmp/
+*.temp
+
+# MacOS
+*.dmg
+.AppleDouble
+.LSOverride
+
+# Windows
+[Tt]humbs.db
+[Tt]humbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Package manager locks (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

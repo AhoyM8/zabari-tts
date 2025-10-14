@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 async function testTTS() {
   console.log('Starting TTS test...');
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
   // Navigate to localhost:3000

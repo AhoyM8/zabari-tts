@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 
 async function debugKick() {
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     args: ['--start-maximized']
   });
 
