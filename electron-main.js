@@ -170,13 +170,16 @@ function startNextJs() {
     });
   } else {
     // Production: use standalone server
-    const serverPath = path.join(standalonePath, 'server.js');
+    // Next.js standalone creates a nested structure: standalone/frontend/server.js
+    const serverPath = path.join(standalonePath, 'frontend', 'server.js');
 
     console.log('[Electron] Server path:', serverPath);
     console.log('[Electron] Server exists:', fs.existsSync(serverPath));
 
     if (!fs.existsSync(serverPath)) {
       console.error('[Electron] Server file not found! Cannot start Next.js');
+      console.error('[Electron] Checked path:', serverPath);
+      console.error('[Electron] Standalone path contents:', fs.existsSync(standalonePath) ? fs.readdirSync(standalonePath) : 'N/A');
       return;
     }
 
@@ -191,7 +194,7 @@ function startNextJs() {
     const nodeCommand = fs.existsSync(nodePath) ? nodePath : 'node';
 
     nextJsProcess = spawn(nodeCommand, [serverPath], {
-      cwd: standalonePath,
+      cwd: path.join(standalonePath, 'frontend'),
       shell: false,
       env: {
         ...process.env,

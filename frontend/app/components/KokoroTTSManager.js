@@ -66,6 +66,89 @@ const KokoroTTSManager = forwardRef(function KokoroTTSManager({ messages, kokoro
     }
   }, [messages, enabled, kokoroConfig, ttsConfig])
 
+  const detectLanguage = (text) => {
+    // Hebrew Unicode range: \u0590-\u05FF
+    const hebrewChars = (text.match(/[\u0590-\u05FF]/g) || []).length
+    // Latin characters (English)
+    const latinChars = (text.match(/[a-zA-Z]/g) || []).length
+
+    const totalChars = hebrewChars + latinChars
+
+    console.log(`[Hybrid TTS DEBUG] Language detection for "${text}":`, {
+      hebrewChars,
+      latinChars,
+      totalChars,
+      hebrewRatio: totalChars > 0 ? (hebrewChars / totalChars).toFixed(2) : 0
+    })
+
+    // If less than 30% are identifiable characters, default to English
+    if (totalChars === 0) {
+      console.log('[Hybrid TTS DEBUG] No identifiable chars, defaulting to english')
+      return 'english'
+    }
+
+    // If more than 30% Hebrew characters, consider it Hebrew
+    const hebrewRatio = hebrewChars / totalChars
+    const result = hebrewRatio > 0.3 ? 'hebrew' : 'english'
+    console.log(`[Hybrid TTS DEBUG] Detected language: ${result}`)
+    return result
+  }
+
+  const synthesizeWithWebSpeech = (text, voiceName) => {
+    console.log(`[Hybrid TTS DEBUG] synthesizeWithWebSpeech called with:`, { text, voiceName })
+
+    return new Promise((resolve) => {
+      if (!window.speechSynthesis) {
+        console.warn('[Hybrid TTS] Web Speech API not available')
+        resolve()
+        return
+      }
+
+      console.log('[Hybrid TTS DEBUG] Creating utterance...')
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.volume = ttsConfig.volume || 1.0
+      utterance.rate = ttsConfig.rate || 1.0
+      utterance.pitch = ttsConfig.pitch || 1.0
+
+      console.log('[Hybrid TTS DEBUG] Utterance settings:', {
+        volume: utterance.volume,
+        rate: utterance.rate,
+        pitch: utterance.pitch,
+        text: utterance.text
+      })
+
+      const voices = window.speechSynthesis.getVoices()
+      console.log(`[Hybrid TTS DEBUG] Available voices: ${voices.length}`)
+
+      const selectedVoice = voices.find(v => v.name === voiceName)
+      if (selectedVoice) {
+        console.log('[Hybrid TTS DEBUG] Selected voice:', { name: selectedVoice.name, lang: selectedVoice.lang })
+        utterance.voice = selectedVoice
+      } else {
+        console.warn('[Hybrid TTS DEBUG] Voice not found:', voiceName)
+        console.log('[Hybrid TTS DEBUG] Available voice names:', voices.map(v => v.name).slice(0, 5))
+      }
+
+      utterance.onstart = () => {
+        console.log('[Hybrid TTS DEBUG] Web Speech started speaking:', text)
+      }
+
+      utterance.onend = () => {
+        console.log('[Hybrid TTS DEBUG] Web Speech finished speaking:', text)
+        resolve()
+      }
+
+      utterance.onerror = (error) => {
+        console.error('[Hybrid TTS DEBUG] Web Speech error:', error)
+        resolve()
+      }
+
+      console.log('[Hybrid TTS DEBUG] Calling speechSynthesis.speak()...')
+      window.speechSynthesis.speak(utterance)
+      console.log('[Hybrid TTS DEBUG] speechSynthesis.speak() called')
+    })
+  }
+
   const processQueue = async () => {
     // Clear any existing timer
     if (queueTimerRef.current) {
@@ -84,14 +167,78 @@ const KokoroTTSManager = forwardRef(function KokoroTTSManager({ messages, kokoro
     try {
       const { username, message } = item
 
-      // Build text to speak
-      const textToSpeak = ttsConfig.announceUsername ? `${username} says: ${message}` : message
+      console.log('[Hybrid TTS DEBUG] ========================================')
+      console.log('[Hybrid TTS DEBUG] Processing new message item:', { username, message })
+      console.log('[Hybrid TTS DEBUG] Current config:', {
+        announceUsername: ttsConfig.announceUsername,
+        hebrewVoice: ttsConfig.hebrewVoice,
+        englishVoice: ttsConfig.englishVoice
+      })
 
-      // Call Kokoro server
-      await synthesizeWithKokoro(textToSpeak, kokoroConfig)
+      // Hybrid TTS: Detect language for username and message separately
+      const usernameLanguage = detectLanguage(username)
+      const messageLanguage = detectLanguage(message)
+
+      console.log(`[Hybrid TTS] username="${username}" (${usernameLanguage}), message="${message}" (${messageLanguage})`)
+
+      // OPTIMIZATION: If both username and message are English, use Kokoro for entire text
+      if (usernameLanguage === 'english' && messageLanguage === 'english') {
+        console.log('[Hybrid TTS] Both username and message are English - using Kokoro for entire text')
+        const fullText = ttsConfig.announceUsername ? `${username} says: ${message}` : message
+        console.log('[Hybrid TTS DEBUG] Full text:', fullText)
+        await synthesizeWithKokoro(fullText, kokoroConfig)
+        console.log('[Hybrid TTS DEBUG] English synthesis completed')
+      } else {
+        // At least one part is Hebrew - use hybrid mode
+        console.log('[Hybrid TTS] Using hybrid mode (at least one part is Hebrew)')
+
+        if (ttsConfig.announceUsername) {
+          // Speak username - Hebrew uses Web Speech, English uses Kokoro
+          if (usernameLanguage === 'hebrew') {
+            console.log('[Hybrid TTS] Using Web Speech for Hebrew username')
+            await synthesizeWithWebSpeech(username, ttsConfig.hebrewVoice)
+            console.log('[Hybrid TTS DEBUG] Hebrew username synthesis completed')
+          } else {
+            console.log('[Hybrid TTS] Using Kokoro for English username')
+            await synthesizeWithKokoro(username, kokoroConfig)
+            console.log('[Hybrid TTS DEBUG] English username synthesis completed')
+          }
+
+          // Small delay
+          console.log('[Hybrid TTS DEBUG] Waiting 100ms before "says:"...')
+          await new Promise(resolve => setTimeout(resolve, 100))
+
+          // Speak "says:" - always use Web Speech for this bridge word
+          console.log('[Hybrid TTS DEBUG] Speaking "says:"...')
+          await synthesizeWithWebSpeech('says:', ttsConfig.englishVoice)
+          console.log('[Hybrid TTS DEBUG] "says:" synthesis completed')
+
+          // Small delay
+          console.log('[Hybrid TTS DEBUG] Waiting 100ms before message...')
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+
+        // Speak message - Hebrew uses Web Speech, English uses Kokoro
+        console.log('[Hybrid TTS DEBUG] About to speak message...')
+        if (messageLanguage === 'hebrew') {
+          console.log('[Hybrid TTS] Using Web Speech for Hebrew message')
+          console.log('[Hybrid TTS DEBUG] Message text:', message)
+          console.log('[Hybrid TTS DEBUG] Hebrew voice:', ttsConfig.hebrewVoice)
+          await synthesizeWithWebSpeech(message, ttsConfig.hebrewVoice)
+          console.log('[Hybrid TTS DEBUG] Hebrew message synthesis completed')
+        } else {
+          console.log('[Hybrid TTS] Using Kokoro for English message')
+          console.log('[Hybrid TTS DEBUG] Message text:', message)
+          await synthesizeWithKokoro(message, kokoroConfig)
+          console.log('[Hybrid TTS DEBUG] English message synthesis completed')
+        }
+      }
+
+      console.log('[Hybrid TTS DEBUG] ========================================')
 
     } catch (error) {
-      console.error('[Kokoro TTS] Error:', error)
+      console.error('[Hybrid TTS] Error:', error)
+      console.error('[Hybrid TTS DEBUG] Error stack:', error.stack)
     }
 
     // Delay between messages to prevent overlap

@@ -255,13 +255,183 @@ async function processQueue(page) {
     const { username, message } = messageQueue.shift();
 
     try {
-      // Check if using Kokoro TTS
+      // Check if using Kokoro TTS (with hybrid Hebrew/English support)
       if (CONFIG.ttsEngine === 'kokoro') {
-        // Build text to speak
-        const textToSpeak = CONFIG.tts.announceUsername ? `${username} says: ${message}` : message;
+        console.log('[Hybrid TTS DEBUG] ========================================');
+        console.log('[Hybrid TTS DEBUG] Processing message in Playwright mode');
+        console.log('[Hybrid TTS DEBUG] Username:', username);
+        console.log('[Hybrid TTS DEBUG] Message:', message);
+        console.log('[Hybrid TTS DEBUG] Config:', {
+          hebrewVoice: CONFIG.tts.hebrewVoice,
+          englishVoice: CONFIG.tts.englishVoice,
+          announceUsername: CONFIG.tts.announceUsername
+        });
 
-        // Call Kokoro server and play audio
-        await synthesizeWithKokoro(textToSpeak, page);
+        // Detect language separately for username and message for hybrid routing
+        const usernameLanguage = detectLanguage(username);
+        const messageLanguage = detectLanguage(message);
+
+        console.log(`Hybrid TTS: username="${username}" (${usernameLanguage}), message="${message}" (${messageLanguage})`);
+
+        // OPTIMIZATION: If both username and message are English, use Kokoro for entire text
+        if (usernameLanguage === 'english' && messageLanguage === 'english') {
+          console.log('[Hybrid TTS] Both username and message are English - using Kokoro for entire text');
+          const fullText = CONFIG.tts.announceUsername ? `${username} says: ${message}` : message;
+          console.log('[Hybrid TTS DEBUG] Full text:', fullText);
+          await synthesizeWithKokoro(fullText, page);
+          console.log('[Hybrid TTS DEBUG] English synthesis completed');
+        } else {
+          // At least one part is Hebrew - use hybrid mode
+          console.log('[Hybrid TTS] Using hybrid mode (at least one part is Hebrew)');
+
+          if (CONFIG.tts.announceUsername) {
+            // Speak username - Hebrew uses Web Speech, English uses Kokoro
+            if (usernameLanguage === 'hebrew') {
+              await page.evaluate(({ text, voiceName, config }) => {
+                return new Promise((resolve) => {
+                  if (!window.speechSynthesis) {
+                    resolve();
+                    return;
+                  }
+
+                  const utterance = new SpeechSynthesisUtterance(text);
+                  utterance.volume = config.volume;
+                  utterance.rate = config.rate;
+                  utterance.pitch = config.pitch;
+
+                  const voices = window.speechSynthesis.getVoices();
+                  const selectedVoice = voices.find(v => v.name === voiceName);
+                  if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                  }
+
+                  utterance.onend = () => resolve();
+                  utterance.onerror = () => resolve();
+
+                  window.speechSynthesis.speak(utterance);
+                });
+              }, {
+                text: username,
+                voiceName: CONFIG.tts.hebrewVoice,
+                config: CONFIG.tts
+              });
+            } else {
+              // English username - use Kokoro
+              await synthesizeWithKokoro(username, page);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Speak "says:" - always use Web Speech for this bridge word
+            await page.evaluate(({ text, voiceName, config }) => {
+              return new Promise((resolve) => {
+                if (!window.speechSynthesis) {
+                  resolve();
+                  return;
+                }
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.volume = config.volume;
+                utterance.rate = config.rate;
+                utterance.pitch = config.pitch;
+
+                const voices = window.speechSynthesis.getVoices();
+                const selectedVoice = voices.find(v => v.name === voiceName);
+                if (selectedVoice) {
+                  utterance.voice = selectedVoice;
+                }
+
+                utterance.onend = () => resolve();
+                utterance.onerror = () => resolve();
+
+                window.speechSynthesis.speak(utterance);
+              });
+            }, {
+              text: 'says:',
+              voiceName: CONFIG.tts.englishVoice,
+              config: CONFIG.tts
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
+          // Speak message - Hebrew uses Web Speech, English uses Kokoro
+          console.log('[Hybrid TTS DEBUG] About to speak message...');
+          if (messageLanguage === 'hebrew') {
+            console.log('[Hybrid TTS DEBUG] Using Web Speech for Hebrew message');
+            console.log('[Hybrid TTS DEBUG] Message text:', message);
+            console.log('[Hybrid TTS DEBUG] Hebrew voice:', CONFIG.tts.hebrewVoice);
+
+            await page.evaluate(({ text, voiceName, config }) => {
+              return new Promise((resolve) => {
+                console.log('[Hybrid TTS DEBUG Browser] synthesizeWithWebSpeech called for:', text);
+
+                if (!window.speechSynthesis) {
+                  console.error('[Hybrid TTS DEBUG Browser] speechSynthesis not available!');
+                  resolve();
+                  return;
+                }
+
+                console.log('[Hybrid TTS DEBUG Browser] Creating utterance...');
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.volume = config.volume;
+                utterance.rate = config.rate;
+                utterance.pitch = config.pitch;
+
+                console.log('[Hybrid TTS DEBUG Browser] Utterance settings:', {
+                  volume: utterance.volume,
+                  rate: utterance.rate,
+                  pitch: utterance.pitch,
+                  text: utterance.text
+                });
+
+                const voices = window.speechSynthesis.getVoices();
+                console.log('[Hybrid TTS DEBUG Browser] Available voices:', voices.length);
+
+                const selectedVoice = voices.find(v => v.name === voiceName);
+                if (selectedVoice) {
+                  console.log('[Hybrid TTS DEBUG Browser] Selected voice:', selectedVoice.name, selectedVoice.lang);
+                  utterance.voice = selectedVoice;
+                } else {
+                  console.warn('[Hybrid TTS DEBUG Browser] Voice not found:', voiceName);
+                  console.log('[Hybrid TTS DEBUG Browser] Available voice names:', voices.map(v => v.name).slice(0, 5));
+                }
+
+                utterance.onstart = () => {
+                  console.log('[Hybrid TTS DEBUG Browser] Web Speech started speaking:', text);
+                };
+
+                utterance.onend = () => {
+                  console.log('[Hybrid TTS DEBUG Browser] Web Speech finished speaking:', text);
+                  resolve();
+                };
+
+                utterance.onerror = (error) => {
+                  console.error('[Hybrid TTS DEBUG Browser] Web Speech error:', error);
+                  resolve();
+                };
+
+                console.log('[Hybrid TTS DEBUG Browser] Calling speechSynthesis.speak()...');
+                window.speechSynthesis.speak(utterance);
+                console.log('[Hybrid TTS DEBUG Browser] speechSynthesis.speak() called');
+              });
+            }, {
+              text: message,
+              voiceName: CONFIG.tts.hebrewVoice,
+              config: CONFIG.tts
+            });
+
+            console.log('[Hybrid TTS DEBUG] Hebrew message synthesis completed');
+          } else {
+            console.log('[Hybrid TTS DEBUG] Using Kokoro for English message');
+            console.log('[Hybrid TTS DEBUG] Message text:', message);
+            // English message - use Kokoro
+            await synthesizeWithKokoro(message, page);
+            console.log('[Hybrid TTS DEBUG] English message synthesis completed');
+          }
+        }
+
+        console.log('[Hybrid TTS DEBUG] ========================================');
 
         // Small delay between messages
         await new Promise(resolve => setTimeout(resolve, 100));

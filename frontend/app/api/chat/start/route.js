@@ -64,17 +64,17 @@ async function startPlaywrightMode(config) {
 
   // Check if running in standalone server (production or dev)
   if (cwd.includes('.next') && cwd.includes('standalone')) {
-    // We're in .../frontend/.next/standalone or .../app/frontend/.next/standalone
+    // We're in .../frontend/.next/standalone/frontend or .../app/frontend/.next/standalone/frontend
 
     // Check if we're in a packaged Electron app (path contains resources/app)
     if (cwd.includes('resources') && cwd.includes('app')) {
-      // Packaged Electron: .../resources/app/frontend/.next/standalone
-      // Go up 3 levels to reach resources/app/
-      basePath = path.join(cwd, '..', '..', '..');
+      // Packaged Electron: .../resources/app/frontend/.next/standalone/frontend
+      // Go up 4 levels to reach resources/app/
+      basePath = path.join(cwd, '..', '..', '..', '..');
     } else {
-      // Dev standalone: .../frontend/.next/standalone
-      // Go up 3 levels to reach project root
-      basePath = path.join(cwd, '..', '..', '..');
+      // Dev standalone: .../frontend/.next/standalone/frontend
+      // Go up 4 levels to reach project root
+      basePath = path.join(cwd, '..', '..', '..', '..');
     }
   } else {
     // Development mode: cwd might be project root or frontend directory
