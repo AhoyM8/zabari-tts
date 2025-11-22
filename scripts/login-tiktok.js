@@ -13,14 +13,28 @@ async function loginTikTok() {
   console.log('👤 Please log in manually and solve any captchas');
   console.log('💡 Then press Enter in this terminal to save the session\n');
 
-  const browser = await chromium.launch({
-    headless: false,
-    channel: 'chrome', // Use real Chrome if available
-    args: [
-      '--start-maximized',
-      '--disable-blink-features=AutomationControlled'
-    ]
-  });
+  // Try to use system Chrome first for better anti-detection
+  // Falls back to bundled Chromium if Chrome is not available
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: false,
+      channel: 'chrome', // Use real Chrome if available (better for anti-detection)
+      args: [
+        '--start-maximized',
+        '--disable-blink-features=AutomationControlled'
+      ]
+    });
+  } catch (error) {
+    console.log('⚠️  Chrome not found, using bundled Chromium...');
+    browser = await chromium.launch({
+      headless: false,
+      args: [
+        '--start-maximized',
+        '--disable-blink-features=AutomationControlled'
+      ]
+    });
+  }
 
   const context = await browser.newContext({
     viewport: null, // Use full window
