@@ -110,13 +110,11 @@ function sendStatusToWindow(text) {
 }
 
 // Path to the frontend directory
-const frontendPath = isDev
-  ? path.join(__dirname, 'frontend')
-  : path.join(resourcesPath, 'app', 'frontend');
+const frontendPath = path.join(__dirname, 'frontend');
 
-// Path to standalone server in production
+// Path to Next.js standalone server (production)
 const standalonePath = isDev
-  ? path.join(frontendPath, '.next', 'standalone')
+  ? null
   : path.join(frontendPath, '.next', 'standalone');
 
 function createWindow() {
@@ -248,47 +246,32 @@ function createTray() {
 function startNextJs() {
   console.log('[Electron] Starting Next.js server...');
   console.log('[Electron] Frontend path:', frontendPath);
-  console.log('[Electron] Standalone path:', standalonePath);
   console.log('[Electron] Is Dev:', isDev);
 
-  // In production, use standalone server; in dev, use npm run dev
   if (isDev) {
+    // Development mode: use npm run dev
+    console.log('[Electron] Starting in development mode with npm run dev');
     nextJsProcess = spawn('npm', ['run', 'dev'], {
       cwd: frontendPath,
       shell: true,
       env: { ...process.env, PORT: NEXT_JS_PORT.toString() }
     });
   } else {
-    // Production: use standalone server
-    // Next.js standalone creates a nested structure: standalone/frontend/server.js
-    const serverPath = path.join(standalonePath, 'frontend', 'server.js');
+    // Production mode: use standalone server
+    // Next.js standalone preserves workspace structure, so server.js is at standalone/frontend/server.js
+    const standaloneServerPath = path.join(standalonePath, 'frontend', 'server.js');
+    const standaloneWorkingDir = path.join(standalonePath, 'frontend');
+    console.log('[Electron] Starting in production mode with standalone server');
+    console.log('[Electron] Server path:', standaloneServerPath);
+    console.log('[Electron] Working dir:', standaloneWorkingDir);
 
-    console.log('[Electron] Server path:', serverPath);
-    console.log('[Electron] Server exists:', fs.existsSync(serverPath));
-
-    if (!fs.existsSync(serverPath)) {
-      console.error('[Electron] Server file not found! Cannot start Next.js');
-      console.error('[Electron] Checked path:', serverPath);
-      console.error('[Electron] Standalone path contents:', fs.existsSync(standalonePath) ? fs.readdirSync(standalonePath) : 'N/A');
-      return;
-    }
-
-    // Use the bundled Node.js from Electron, not the Electron exe itself
-    const nodePath = process.platform === 'win32'
-      ? path.join(process.resourcesPath, '..', 'node.exe')
-      : process.execPath;
-
-    console.log('[Electron] Node path:', nodePath);
-
-    // If bundled node doesn't exist, try system node
-    const nodeCommand = fs.existsSync(nodePath) ? nodePath : 'node';
-
-    nextJsProcess = spawn(nodeCommand, [serverPath], {
-      cwd: path.join(standalonePath, 'frontend'),
+    nextJsProcess = spawn('node', [standaloneServerPath], {
+      cwd: standaloneWorkingDir,
       shell: false,
       env: {
         ...process.env,
         PORT: NEXT_JS_PORT.toString(),
+        HOSTNAME: 'localhost',
         NODE_ENV: 'production'
       }
     });
@@ -299,7 +282,7 @@ function startNextJs() {
 
     // Detect when server is ready
     const output = data.toString();
-    if (output.includes('Local:') || output.includes('started server') || output.includes('Ready')) {
+    if (output.includes('Local:') || output.includes('started server') || output.includes('Ready') || output.includes('Listening on')) {
       console.log('[Electron] Next.js server is ready!');
       setTimeout(() => {
         if (mainWindow) {
@@ -370,7 +353,6 @@ app.whenReady().then(async () => {
   console.log('[Electron] __dirname:', __dirname);
   console.log('[Electron] resourcesPath:', resourcesPath);
   console.log('[Electron] frontendPath:', frontendPath);
-  console.log('[Electron] standalonePath:', standalonePath);
   console.log('[Electron] process.cwd():', process.cwd());
   console.log('='.repeat(80));
 

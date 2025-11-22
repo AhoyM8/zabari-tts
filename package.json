@@ -7,14 +7,13 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "electron": "electron .",
     "electron:dev": "electron . --dev",
-    "build:frontend": "cd frontend && npm run build",
-    "prepare:electron": "node scripts/build/prepare-electron.js",
-    "pack": "npm run build:frontend && npm run prepare:electron && electron-builder --dir",
-    "dist": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64",
-    "dist:portable": "npm run build:frontend && npm run prepare:electron && electron-builder --win portable",
-    "dist:all": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64",
-    "publish:github": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64 --publish always",
-    "draft:github": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64 --publish onTagOrDraft",
+    "build:frontend": "cd frontend && npm run build && cd .. && node scripts/post-build.js",
+    "pack": "npm run build:frontend && electron-builder --dir",
+    "dist": "npm run build:frontend && electron-builder --win --x64",
+    "dist:portable": "npm run build:frontend && electron-builder --win portable",
+    "dist:all": "npm run build:frontend && electron-builder --win --x64",
+    "publish:github": "npm run build:frontend && electron-builder --win --x64 --publish always",
+    "draft:github": "npm run build:frontend && electron-builder --win --x64 --publish onTagOrDraft",
     "release:check": "node scripts/release/pre-release-checklist.js",
     "release:patch": "node scripts/release/create-release.js patch",
     "release:minor": "node scripts/release/create-release.js minor",
@@ -41,7 +40,6 @@
     "electron-updater": "^6.6.2",
     "playwright": "^1.56.0",
     "pusher-js": "^8.4.0",
-    "tiktok-live-connector": "^2.1.0",
     "tmi.js": "^1.8.5",
     "utf-8-validate": "^6.0.5"
   },
@@ -62,6 +60,7 @@
       "buildResources": "assets"
     },
     "asar": false,
+    "npmRebuild": false,
     "publish": [
       {
         "provider": "github",
@@ -76,42 +75,25 @@
       "assets/**/*",
       "chat-logger-webspeech.js",
       "lib/**/*",
-      "node_modules/**/*",
-      "!node_modules/.cache/**/*",
-      "!node_modules/fsevents/**/*",
-      "!node_modules/@esbuild/darwin-*/**/*",
-      "!node_modules/@esbuild/linux-*/**/*",
-      "frontend/.next/**/*",
-      "frontend/public/**/*",
-      "frontend/node_modules/**/*",
       "frontend/package.json",
-      "!frontend/node_modules/.cache/**/*",
-      "!frontend/node_modules/fsevents/**/*",
-      "!frontend/node_modules/@esbuild/darwin-*/**/*",
-      "!frontend/node_modules/@esbuild/linux-*/**/*"
+      "frontend/.next/standalone/**/*",
+      "frontend/.next/static/**/*",
+      "frontend/.next/*.json",
+      "frontend/public/**/*"
     ],
     "extraResources": [
-      {
-        "from": "python-embedded",
-        "to": "python-embedded",
-        "filter": [
-          "**/*",
-          "!**/*.pyc",
-          "!**/__pycache__/**",
-          "!**/tests/**",
-          "!**/test/**"
-        ]
-      },
       {
         "from": "kokoro-tts",
         "to": "kokoro-tts",
         "filter": [
-          "**/*",
-          "!*.pyc",
-          "!__pycache__",
+          "tts-server.py",
+          "requirements.txt",
+          "README.md",
+          "kokoro/**/*",
+          "!**/*.pyc",
+          "!**/__pycache__/**",
           "!.venv/**/*",
-          "!venv/**/*",
-          "!test_output.log"
+          "!venv/**/*"
         ]
       }
     ],
@@ -140,7 +122,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Zabari TTS"
+      "shortcutName": "Zabari TTS",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"

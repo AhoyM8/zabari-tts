@@ -52,6 +52,12 @@ source .venv/bin/activate && python tts-server.py --device cuda
 ```
 
 ### Dependencies
+
+**Prerequisites:**
+- Node.js v18 or higher
+- Python 3.10+ (for Kokoro TTS)
+
+**Installation:**
 ```bash
 # Node.js (root directory)
 npm install
@@ -68,6 +74,8 @@ uv venv
 uv pip install -r requirements.txt
 # Also install espeak-ng (see kokoro-tts/README.md)
 ```
+
+**Important:** The Electron build does NOT bundle Node.js or Python. Users must have these installed on their system.
 
 ## Architecture
 

@@ -219,6 +219,15 @@ Before running `npm run release:*`:
 - [ ] Package.json has correct GitHub username
 - [ ] Icons are generated: `npm run generate-icons`
 
+## Prerequisites for Users
+
+**Important:** Users installing your app need:
+- ✓ **Node.js** installed (v18 or higher)
+- ✓ **Python** installed (for Kokoro TTS) with dependencies
+- ✓ **npm dependencies** installed in both root and frontend directories
+
+The app does NOT bundle Node.js or Python - it uses the system installations.
+
 Run checklist automatically:
 ```bash
 npm run release:check
