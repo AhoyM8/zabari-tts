@@ -4,29 +4,19 @@ import path from 'path'
 import fs from 'fs'
 import { addMessage, clearMessages, setConnectionMode } from '../messages/route.js'
 
-// Store active process (Playwright mode) or clients (API mode)
+// Store active Playwright process and TikTok hybrid client
 let chatProcess = null
-let apiClients = null
+let tiktokClient = null // TikTok hybrid mode client (separate Playwright instance)
 
 export async function POST(request) {
   try {
     const config = await request.json()
-    const { connectionMode = 'playwright' } = config
 
     // Clear old messages
     await clearMessages()
 
-    // Handle based on connection mode
-    if (connectionMode === 'playwright') {
-      return await startPlaywrightMode(config)
-    } else if (connectionMode === 'api') {
-      return await startApiMode(config)
-    } else {
-      return NextResponse.json({
-        success: false,
-        error: `Unknown connection mode: ${connectionMode}`
-      }, { status: 400 })
-    }
+    // Always use Playwright mode (with TikTok hybrid)
+    return await startPlaywrightMode(config)
 
   } catch (error) {
     console.error('Error starting chat logger:', error)
@@ -38,7 +28,8 @@ export async function POST(request) {
 }
 
 /**
- * Start Playwright mode (existing functionality)
+ * Start chat logger in Playwright mode
+ * HYBRID MODE: TikTok uses separate Playwright client with session/bot detection avoidance
  */
 async function startPlaywrightMode(config) {
   // If already running, stop it first
@@ -47,8 +38,51 @@ async function startPlaywrightMode(config) {
     chatProcess = null
   }
 
+  // Disconnect TikTok hybrid client if exists
+  if (tiktokClient) {
+    try {
+      await tiktokClient.disconnect()
+    } catch (error) {
+      console.error('Error disconnecting TikTok hybrid client:', error)
+    }
+    tiktokClient = null
+  }
+
   // Set connection mode for message routing
   setConnectionMode('playwright')
+
+  // HYBRID MODE: Initialize TikTok Playwright client if enabled
+  // (TikTok uses session authentication and bot detection avoidance)
+  if (config.platforms?.tiktok?.enabled) {
+    try {
+      console.log('[HYBRID MODE] Initializing TikTok client...')
+      const { default: TikTokChatClient } = await import('../../../../../lib/chat-api/tiktok-client.js')
+
+      const username = config.platforms.tiktok.username
+      if (username) {
+        const client = new TikTokChatClient({
+          channelName: username,
+          ttsConfig: config.ttsConfig, // Pass TTS config for built-in TTS support
+          onMessage: (platform, username, message) => {
+            // Log message in the format expected by chat-logger for TTS routing
+            console.log(`[TIKTOK] ${username}: ${message}`)
+            // Add to message buffer for frontend display
+            addMessage({ platform, username, message })
+          },
+          onError: (error) => {
+            console.error('[TIKTOK HYBRID ERROR]', error)
+          }
+        })
+
+        await client.connect()
+        tiktokClient = client // Store TikTok client
+        console.log('[HYBRID MODE] TikTok client connected successfully')
+      }
+    } catch (error) {
+      console.error('[HYBRID MODE] Failed to initialize TikTok client:', error)
+      // Continue anyway - don't fail the entire startup
+    }
+  }
 
   // Determine base path (handle both dev and production)
   // In packaged Electron standalone server: process.cwd() = .../resources/app/frontend/.next/standalone
@@ -124,7 +158,7 @@ async function startPlaywrightMode(config) {
     const lines = output.split('\n');
     lines.forEach(line => {
       // Match lines that contain PLATFORM:username:message pattern
-      const match = line.match(/(TWITCH|YOUTUBE|KICK):([^:]+):(.+)$/);
+      const match = line.match(/(TWITCH|YOUTUBE|KICK|TIKTOK):([^:]+):(.+)$/);
       if (match) {
         const [, platform, username, message] = match;
         console.log(`[MATCHED MESSAGE] Platform: ${platform}, User: ${username}, Message: ${message}`);
@@ -148,76 +182,19 @@ async function startPlaywrightMode(config) {
 
   return NextResponse.json({
     success: true,
-    message: 'Chat logger started (Playwright mode)',
-    mode: 'playwright',
+    message: 'Chat logger started',
     engine: config.ttsEngine
   })
 }
 
 /**
- * Start API mode (new functionality)
- */
-async function startApiMode(config) {
-  try {
-    // Set connection mode for message routing
-    setConnectionMode('api')
-
-    // Dynamically import the chat API module
-    const chatApiModule = await import('../../../../lib/chat-api/index.js')
-    const { initializeChatClients, disconnectAll } = chatApiModule
-
-    // Disconnect existing clients if any
-    if (apiClients) {
-      await disconnectAll()
-      apiClients = null
-    }
-
-    // Initialize chat clients
-    apiClients = await initializeChatClients({
-      platforms: config.platforms,
-      ttsConfig: config.ttsConfig,
-      youtubeApiKey: config.youtubeApiKey,
-      onMessage: (platform, username, message) => {
-        console.log(`[API MODE] ${platform.toUpperCase()}: ${username}: ${message}`)
-        // Message already added to buffer by initializeChatClients
-        // But we also add to the route's message buffer for consistency
-        addMessage({
-          platform,
-          username,
-          message
-        })
-      }
-    })
-
-    console.log(`Chat clients initialized in API mode. Active clients: ${apiClients.length}`)
-
-    return NextResponse.json({
-      success: true,
-      message: 'Chat clients started (API mode)',
-      mode: 'api',
-      clientsCount: apiClients.length
-    })
-
-  } catch (error) {
-    console.error('Error starting API mode:', error)
-    return NextResponse.json({
-      success: false,
-      error: error.message,
-      stack: error.stack
-    }, { status: 500 })
-  }
-}
-
-/**
- * Get active process/clients (for status check)
+ * Get active process (for status check)
  */
 export function getActiveConnection() {
-  if (chatProcess) {
-    return { mode: 'playwright', active: true }
-  } else if (apiClients && apiClients.length > 0) {
-    return { mode: 'api', active: true, clientsCount: apiClients.length }
+  if (chatProcess || tiktokClient) {
+    return { active: true }
   }
-  return { mode: null, active: false }
+  return { active: false }
 }
 
 /**
@@ -229,10 +206,15 @@ export async function stopAll() {
     chatProcess = null
   }
 
-  if (apiClients) {
-    const chatApiModule = await import('../../../../lib/chat-api/index.js')
-    await chatApiModule.disconnectAll()
-    apiClients = null
+  if (tiktokClient) {
+    // Disconnect TikTok hybrid client
+    try {
+      await tiktokClient.disconnect()
+      console.log('[HYBRID MODE] TikTok client disconnected')
+    } catch (error) {
+      console.error('[HYBRID MODE] Error disconnecting TikTok:', error)
+    }
+    tiktokClient = null
   }
 
   // Reset connection mode

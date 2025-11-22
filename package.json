@@ -12,7 +12,9 @@
     "pack": "npm run build:frontend && npm run prepare:electron && electron-builder --dir",
     "dist": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64",
     "dist:portable": "npm run build:frontend && npm run prepare:electron && electron-builder --win portable",
-    "generate-icons": "node scripts/build/generate-icons-from-any.js"
+    "generate-icons": "node scripts/build/generate-icons-from-any.js",
+    "tiktok:chat": "node scripts/tiktok-chat-beautiful.js",
+    "c": "claude --permission-mode bypassPermissions"
   },
   "keywords": [
     "tts",
@@ -27,9 +29,12 @@
   "type": "commonjs",
   "dependencies": {
     "@playwright/test": "^1.56.0",
+    "bufferutil": "^4.0.9",
     "playwright": "^1.56.0",
     "pusher-js": "^8.4.0",
-    "tmi.js": "^1.8.5"
+    "tiktok-live-connector": "^2.1.0",
+    "tmi.js": "^1.8.5",
+    "utf-8-validate": "^6.0.5"
   },
   "devDependencies": {
     "electron": "^38.2.2",

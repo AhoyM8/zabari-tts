@@ -11,6 +11,7 @@ module.exports = {
         twitch: '#9146FF',
         youtube: '#FF0000',
         kick: '#53FC18',
+        tiktok: '#25F4EE',
       },
     },
   },

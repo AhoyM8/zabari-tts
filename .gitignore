@@ -60,6 +60,11 @@ dynamic-config.json
 chat-logger.pid
 *.pid
 
+# Session files (contain sensitive auth data)
+tiktok_session.json
+instagram_session.json
+*_session.json
+
 # Test outputs
 test-screenshots/
 test_output.log

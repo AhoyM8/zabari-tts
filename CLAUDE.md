@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-platform chat logger with real-time text-to-speech (TTS) for live streaming. Monitors Twitch, YouTube, and Kick chats using two connection methods: **Playwright browser automation** (local) or **Direct API connections** (Vercel-compatible). Features a modern Next.js web interface with live chat display and supports two TTS engines: Web Speech API (browser-based) and Kokoro-82M (lightweight & fast AI TTS).
+Multi-platform chat logger with real-time text-to-speech (TTS) for live streaming. Monitors Twitch, YouTube, Kick, and TikTok chats using **Playwright browser automation**. Features a modern Next.js web interface with live chat display and supports two TTS engines: Web Speech API (browser-based) and Kokoro-82M (lightweight & fast AI TTS).
 
-**NEW**: Dual connection mode allows deployment to Vercel and other serverless platforms without Playwright dependencies!
+**HYBRID MODE**: TikTok uses a separate API client with session authentication and bot detection avoidance while other platforms use standard Playwright automation.
 
 ## Running the Application
 
@@ -20,12 +20,12 @@ npm run dev
 Open http://localhost:3000 in your browser to access the web UI.
 
 The web interface allows you to:
-- **Choose connection method**: Playwright (browser automation) or API (direct connections)
-- Toggle Twitch, YouTube, and Kick chats individually
-- Configure custom chat URLs for each platform
+- Toggle Twitch, YouTube, Kick, and TikTok chats individually
+- Configure custom usernames/channels for each platform
 - Choose between Web Speech API and Kokoro-82M TTS engines
 - Adjust TTS settings (volume, rate, pitch, speed, voice selection, filters)
 - View live chat messages from all platforms in real-time
+- **TikTok Note**: Requires `tiktok_session.json` file (run `npm run tiktok:login` first)
 
 ### Option 2: Command Line
 
@@ -71,48 +71,30 @@ uv pip install -r requirements.txt
 
 ## Architecture
 
-### Dual Connection Mode
+### Connection Mode: Playwright with TikTok Hybrid
 
-**Playwright Mode** (Local Development):
-- Uses browser automation to capture chat messages
+**Playwright Browser Automation**:
+- Uses Playwright to open chat pages in browser windows
+- Monitors DOM for new chat messages via MutationObserver
+- Works for: Twitch, YouTube, Kick
 - Requires Playwright browser binaries
-- Best for local development and testing
-- Supports all TTS engines
+- TTS runs in browser context (Web Speech API) or via HTTP (Kokoro)
 
-**API Mode** (Vercel-Compatible):
-- Direct IRC/WebSocket/HTTP connections to chat platforms
-- No browser dependencies - smaller deployment size
-- Works on serverless platforms (Vercel, Netlify, AWS Lambda)
-- More reliable and efficient
+**TikTok Hybrid Mode**:
+- TikTok uses separate API client with session authentication
+- Avoids bot detection with stealth Playwright setup
+- Requires `tiktok_session.json` file (created via `npm run tiktok:login`)
+- Has built-in TTS support (Web Speech API)
+- Runs in independent browser instance
 
 ### Three-Tier Architecture
 1. **Next.js Frontend** (`frontend/`) - Modern web UI for configuration and live chat display
 2. **Chat Connection Layer**:
-   - **Playwright Mode**: `chat-logger-webspeech.js` - Browser automation
-   - **API Mode**: `lib/chat-api/` - Direct chat API clients (TMI.js for Twitch, Pusher for Kick, YouTube Data API)
+   - **Playwright**: `chat-logger-webspeech.js` - Browser automation for Twitch/YouTube/Kick
+   - **TikTok Hybrid**: `lib/chat-api/tiktok-client.js` - Session-based client with bot detection avoidance
 3. **TTS Engine** - Web Speech API (browser) or Kokoro-82M (`kokoro-tts/tts-server.py`)
 
-### Chat Message Flow (API Mode)
-
-**Twitch (TMI.js):**
-1. Connect to Twitch IRC using `tmi.js` library
-2. Subscribe to channel chat events
-3. Receive messages in real-time via IRC protocol
-4. No browser needed - pure WebSocket connection
-
-**Kick (Pusher):**
-1. Fetch chatroom ID from Kick API (`/api/v2/channels/{channel}`)
-2. Connect to Pusher WebSocket (`wss://ws-us2.pusher.com`)
-3. Subscribe to chatroom channel
-4. Receive messages via Pusher events
-
-**YouTube (Data API v3):**
-1. Get live chat ID from video details
-2. Poll `liveChatMessages` endpoint (2-second intervals)
-3. Requires API key (free tier: 10,000 units/day)
-4. Track processed message IDs to prevent duplicates
-
-### Chat Message Flow (Playwright Mode)
+### Chat Message Flow (Playwright Mode - Twitch/YouTube/Kick)
 1. Playwright opens three browser tabs (Twitch, YouTube, Kick) in headed mode
 2. MutationObserver in each page's context watches for new DOM nodes
 3. When chat message detected, logs to console with platform prefix (e.g., `TWITCH:username:message`)
@@ -136,6 +118,13 @@ uv pip install -r requirements.txt
 - No stable selectors - uses `querySelector('button')` to find username
 - Extracts message by finding `username:` pattern in full text content
 - Container: `[id*="channel-chatroom"]`
+
+**TikTok (Hybrid Mode):**
+- Uses separate Playwright browser with session authentication
+- Selector: `div.w-full.pt-4[data-index]`
+- Username/Message: Extracted from `innerText` (first line = username, rest = message)
+- Polling interval: 3 seconds
+- Built-in TTS support (Web Speech API only)
 
 ### TTS Implementation Details
 
@@ -201,16 +190,16 @@ uv pip install -r requirements.txt
 - **Hebrew Voice**: Select from available Hebrew voices (he-*)
 - **Single Voice**: Used when auto-detect is disabled
 
-**Supported in Both Modes:**
-- Playwright Mode: Lines 167-268 in `chat-logger-webspeech.js`
-- API Mode: Lines 83-155 in `frontend/app/components/TTSManager.js`
+**Supported in Playwright Mode:**
+- Lines 167-268 in `chat-logger-webspeech.js`
+- TikTok client: Lines 155-249 in `lib/chat-api/tiktok-client.js`
 
 ## Configuration
 
 ### Web Interface (Recommended)
 All configuration can be done through the web UI at http://localhost:3000:
-- **Connection Method**: Choose between Playwright (browser) or API (direct connections)
-- **Chat URLs**: Enable/disable platforms and customize URLs per platform
+- **Chat Platforms**: Enable/disable Twitch, YouTube, Kick, and TikTok individually
+- **Platform Identifiers**: Enter usernames/channels for each platform
 - **TTS Engine**: Switch between Web Speech API and Kokoro-82M
 - **TTS Settings**:
   - **Single Voice Mode**: Select one voice for all messages
@@ -220,10 +209,9 @@ All configuration can be done through the web UI at http://localhost:3000:
   - **Web Speech API**: Choose from all available system voices, filter by language
   - **Kokoro-82M**: Select from 12 built-in voices via dropdown, adjust speed
 - **Message Filtering**: Exclude commands, links, and specific usernames
-- **YouTube API Key**: Required for YouTube in API mode (optional in Playwright mode)
 - **Live Chat**: View all messages from enabled platforms in real-time
 
-Configuration is dynamically passed to the chat logger via `dynamic-config.json` (Playwright mode) or directly to API clients (API mode).
+Configuration is dynamically passed to the chat logger via `dynamic-config.json`.
 
 ### Command Line Configuration
 For standalone use without the web UI:
@@ -254,19 +242,12 @@ Kick's dynamic class names required flexible selector strategy:
 - Uses `fullText.lastIndexOf(username + ':')` to handle timestamps/duplicates
 - Observes entire chatroom container with `subtree: true` due to nested structure
 
-### Message Buffer Routing
-The system uses two separate message buffers:
-- **Playwright Mode Buffer**: Array-based buffer in `frontend/app/api/chat/messages/route.js`
-  - Messages parsed from chat-logger process stdout
-  - Format: `PLATFORM:username:message`
-- **API Mode Buffer**: Class-based buffer in `lib/chat-api/message-buffer.js`
-  - Messages added directly by chat API clients (Twitch, YouTube, Kick)
-  - Singleton pattern for shared access
-
-**Mode Tracking**: `setConnectionMode()` function tracks active mode to route GET requests to correct buffer:
-- When mode is 'playwright', returns array buffer
-- When mode is 'api', returns class-based buffer
-- Prevents stale messages when switching between modes
+### Message Buffer
+Messages are stored in an array-based buffer in `frontend/app/api/chat/messages/route.js`:
+- Messages parsed from chat-logger process stdout (Twitch/YouTube/Kick)
+- Format: `PLATFORM:username:message`
+- TikTok messages added directly via `addMessage()` from hybrid client
+- Last 100 messages kept in memory
 
 ### TTS Server Endpoints
 
@@ -277,17 +258,46 @@ The system uses two separate message buffers:
 - **GPU Control**: Server started with `--device cpu` or `--device cuda` flag (not API endpoint)
 
 ### Frontend API Endpoints
-- `POST /api/chat/start` - Starts chat logger (Playwright mode) or API clients (API mode)
-- `POST /api/chat/stop` - Stops chat logger or disconnects API clients
+- `POST /api/chat/start` - Starts Playwright chat logger and TikTok hybrid client
+- `POST /api/chat/stop` - Stops chat logger and disconnects TikTok client
 - `GET /api/chat/status` - Checks if chat logger is running
 - `GET /api/chat/messages` - Returns buffered messages (last 100)
 
-### Chat API Clients (API Mode)
-- `lib/chat-api/twitch-client.js` - Twitch IRC client using tmi.js
-- `lib/chat-api/kick-client.js` - Kick WebSocket client using Pusher
-- `lib/chat-api/youtube-client.js` - YouTube polling client using Data API v3
-- `lib/chat-api/message-buffer.js` - Shared message buffer
-- `lib/chat-api/index.js` - Client manager and coordinator
+### TikTok Hybrid Client
+- `lib/chat-api/tiktok-client.js` - TikTok session-based client with bot detection avoidance
+  - Uses Playwright with session authentication (`tiktok_session.json`)
+  - Polls for messages every 3 seconds
+  - Built-in TTS support with Web Speech API
+  - Message filtering (commands, links, excluded users)
+  - Independent browser instance (doesn't interfere with other platforms)
+
+### TikTok Session Setup
+To use TikTok chat monitoring, you must create a session file first:
+
+1. **Run the login script:**
+   ```bash
+   npm run tiktok:login
+   # or: node scripts/login-tiktok.js
+   ```
+
+2. **Login process:**
+   - Browser will open to TikTok login page
+   - Login with your TikTok account
+   - Press Enter in terminal once logged in
+   - Session saved to `tiktok_session.json`
+
+3. **Session contents:**
+   - Cookies
+   - localStorage
+   - sessionStorage
+
+4. **Session validity:**
+   - Usually lasts weeks/months
+   - Regenerate if connection fails (run login script again)
+
+5. **Security notes:**
+   - Keep `tiktok_session.json` private (already in `.gitignore`)
+   - Contains authentication tokens for your TikTok account
 
 ### Debugging Scripts
 - `scripts/debug/inspect-kick.js` - Analyzes Kick DOM structure

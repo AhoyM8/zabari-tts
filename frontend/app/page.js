@@ -1,29 +1,25 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'react-toastify'
-import { FaTwitch, FaYoutube } from 'react-icons/fa'
+import { FaTwitch, FaYoutube, FaTiktok } from 'react-icons/fa'
 import { SiKick } from 'react-icons/si'
-import TTSManager from './components/TTSManager'
-import KokoroTTSManager from './components/KokoroTTSManager'
 import ElectronTTSManager from './components/ElectronTTSManager'
 
 export default function Home() {
-  // TTS Manager ref for controlling TTS
-  const ttsManagerRef = useRef(null)
   // Chat platform states (now stores usernames/identifiers instead of full URLs)
   const [platforms, setPlatforms] = useState({
     twitch: { enabled: false, username: 'zabariyarin' },
     youtube: { enabled: false, videoId: 'zabariyarin' }, // Can be video ID or @username
-    kick: { enabled: false, username: 'zabariyarin' }
+    kick: { enabled: false, username: 'zabariyarin' },
+    tiktok: { enabled: false, username: 'zabariyarin' }
   })
 
   // TTS engine selection
   const [ttsEngine, setTtsEngine] = useState('webspeech') // 'webspeech' or 'kokoro'
 
-  // Connection mode selection
-  const [connectionMode, setConnectionMode] = useState('playwright') // 'playwright' or 'api'
-  const [youtubeApiKey, setYoutubeApiKey] = useState('') // For API mode YouTube
+  // Connection mode - always Playwright (with TikTok hybrid mode)
+  const connectionMode = 'playwright'
 
   // TTS configuration
   const [ttsConfig, setTtsConfig] = useState({
@@ -179,8 +175,7 @@ export default function Home() {
         const config = {
           platforms,
           ttsEngine,
-          connectionMode,
-          youtubeApiKey: connectionMode === 'api' ? youtubeApiKey : undefined,
+          connectionMode: 'playwright', // Always Playwright (with TikTok hybrid)
           // For Kokoro (hybrid mode), merge both configs to enable Hebrew/English voice switching
           ttsConfig: ttsEngine === 'webspeech' ? ttsConfig : {
             ...kokoroConfig,
@@ -207,7 +202,7 @@ export default function Home() {
         if (data.success) {
           setIsRunning(true)
           setStatus('running')
-          toast.success(`Chat logger started in ${connectionMode} mode!`)
+          toast.success('Chat logger started!')
         } else {
           toast.error(data.error || 'Failed to start chat logger')
           setStatus('error')
@@ -238,29 +233,6 @@ export default function Home() {
     }))
   }
 
-  // Skip current TTS
-  const skipCurrentTTS = () => {
-    if (connectionMode === 'api' && ttsManagerRef.current) {
-      // For API mode, cancel current and let queue continue
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel()
-      }
-      toast.info('Skipped current TTS')
-    } else {
-      // For Playwright mode, we can't directly control it from here
-      toast.warning('Skip current is only available in API mode')
-    }
-  }
-
-  // Cancel all TTS
-  const cancelAllTTS = () => {
-    if (ttsManagerRef.current) {
-      ttsManagerRef.current.cancelAll()
-      toast.info('All TTS messages cancelled')
-    } else {
-      toast.warning('Cancel all is only available in API mode')
-    }
-  }
 
   // Memoized callback to prevent re-renders
   const handleServerStatusChange = useCallback((status) => {
@@ -275,26 +247,6 @@ export default function Home() {
         onServerStatusChange={handleServerStatusChange}
       />
 
-      {/* TTS Manager for API mode - only active when using API connection with Web Speech */}
-      {connectionMode === 'api' && isRunning && ttsEngine === 'webspeech' && (
-        <TTSManager
-          ref={ttsManagerRef}
-          messages={messages}
-          ttsConfig={ttsConfig}
-          enabled={true}
-        />
-      )}
-
-      {/* Kokoro TTS Manager for API mode - only active when using API connection with Kokoro */}
-      {connectionMode === 'api' && isRunning && ttsEngine === 'kokoro' && (
-        <KokoroTTSManager
-          ref={ttsManagerRef}
-          messages={messages}
-          kokoroConfig={kokoroConfig}
-          ttsConfig={ttsConfig}
-          enabled={true}
-        />
-      )}
 
       <div className="max-w-7xl mx-auto">
         {/* Header */}
@@ -353,11 +305,13 @@ export default function Home() {
                       <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
                         msg.platform === 'twitch' ? 'bg-twitch' :
                         msg.platform === 'youtube' ? 'bg-youtube' :
-                        'bg-kick'
+                        msg.platform === 'kick' ? 'bg-kick' :
+                        'bg-tiktok'
                       }`}>
                         {msg.platform === 'twitch' && <FaTwitch className="w-5 h-5 text-white" />}
                         {msg.platform === 'youtube' && <FaYoutube className="w-5 h-5 text-white" />}
                         {msg.platform === 'kick' && <SiKick className="w-5 h-5 text-white" />}
+                        {msg.platform === 'tiktok' && <FaTiktok className="w-5 h-5 text-white" />}
                       </div>
 
                       {/* Message Content */}
@@ -366,7 +320,8 @@ export default function Home() {
                           <span className={`font-semibold ${
                             msg.platform === 'twitch' ? 'text-twitch' :
                             msg.platform === 'youtube' ? 'text-youtube' :
-                            'text-kick'
+                            msg.platform === 'kick' ? 'text-kick' :
+                            'text-tiktok'
                           }`}>
                             {msg.username}
                           </span>
@@ -397,31 +352,6 @@ export default function Home() {
                 {isRunning ? '⏹ Stop Chat Logger' : '▶ Start Chat Logger'}
               </button>
 
-              {/* TTS Control Buttons - Only show in API mode when running */}
-              {connectionMode === 'api' && isRunning && (
-                <>
-                  <button
-                    onClick={skipCurrentTTS}
-                    className="px-4 py-3 rounded-lg font-semibold text-sm transition-colors bg-yellow-600 hover:bg-yellow-700 flex items-center justify-center gap-2 shadow-md whitespace-nowrap"
-                    title="Skip current TTS message"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
-                    </svg>
-                    Skip Current
-                  </button>
-                  <button
-                    onClick={cancelAllTTS}
-                    className="px-4 py-3 rounded-lg font-semibold text-sm transition-colors bg-orange-600 hover:bg-orange-700 flex items-center justify-center gap-2 shadow-md whitespace-nowrap"
-                    title="Cancel all TTS messages in queue"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                    Cancel All
-                  </button>
-                </>
-              )}
             </div>
 
             {/* Status Indicator */}
@@ -548,103 +478,47 @@ export default function Home() {
                   />
                 )}
               </div>
+
+              {/* TikTok */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-tiktok rounded-lg flex items-center justify-center">
+                      <FaTiktok className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">TikTok</h3>
+                      <p className="text-sm text-gray-400">Live stream chat</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => togglePlatform('tiktok')}
+                    className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                      platforms.tiktok.enabled ? 'bg-tiktok' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                        platforms.tiktok.enabled ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                {platforms.tiktok.enabled && (
+                  <input
+                    type="text"
+                    value={platforms.tiktok.username}
+                    onChange={(e) => updatePlatformIdentifier('tiktok', e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-tiktok text-sm"
+                    placeholder="Enter TikTok username (e.g., @username or username)"
+                  />
+                )}
+              </div>
             </div>
           </div>
 
           {/* Right Column - TTS Settings */}
           <div className="space-y-6">
-            {/* Connection Method Selection */}
-            <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 card-hover">
-              <h2 className="text-xl sm:text-2xl font-bold mb-6">Chat Connection Method</h2>
-
-              <div className="space-y-4">
-                {/* Playwright Mode */}
-                <button
-                  onClick={() => setConnectionMode('playwright')}
-                  className={`w-full p-4 rounded-lg border-2 transition-all ${
-                    connectionMode === 'playwright'
-                      ? 'border-green-500 bg-green-500/10'
-                      : 'border-gray-700 hover:border-gray-600'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-left">
-                      <h3 className="font-semibold text-lg">Playwright (Browser Automation)</h3>
-                      <p className="text-sm text-gray-400">Local only - requires installed browsers</p>
-                    </div>
-                    <div className={`w-5 h-5 rounded-full border-2 ${
-                      connectionMode === 'playwright' ? 'border-green-500 bg-green-500' : 'border-gray-600'
-                    }`}>
-                      {connectionMode === 'playwright' && (
-                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-                </button>
-
-                {/* API Mode */}
-                <button
-                  onClick={() => setConnectionMode('api')}
-                  className={`w-full p-4 rounded-lg border-2 transition-all ${
-                    connectionMode === 'api'
-                      ? 'border-blue-500 bg-blue-500/10'
-                      : 'border-gray-700 hover:border-gray-600'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-left">
-                      <h3 className="font-semibold text-lg">Direct API Connection</h3>
-                      <p className="text-sm text-gray-400">Vercel-compatible - works everywhere</p>
-                    </div>
-                    <div className={`w-5 h-5 rounded-full border-2 ${
-                      connectionMode === 'api' ? 'border-blue-500 bg-blue-500' : 'border-gray-600'
-                    }`}>
-                      {connectionMode === 'api' && (
-                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              </div>
-
-              {/* API Mode Config */}
-              {connectionMode === 'api' && (
-                <div className="mt-6 space-y-4 p-4 bg-gray-800 rounded-lg">
-                  <div className="flex items-start gap-2 text-sm text-blue-400 mb-4">
-                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
-                    </svg>
-                    <div>
-                      <strong>API Mode TTS:</strong> Supports both Web Speech API and Kokoro TTS engines.
-                    </div>
-                  </div>
-
-                  {platforms.youtube?.enabled && (
-                    <div>
-                      <label className="block text-sm font-medium mb-2">YouTube API Key (Optional)</label>
-                      <input
-                        type="password"
-                        value={youtubeApiKey}
-                        onChange={(e) => setYoutubeApiKey(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
-                        placeholder="Get from Google Cloud Console"
-                      />
-                      <p className="mt-2 text-xs text-gray-500">
-                        Required for YouTube in API mode. Get your key at{' '}
-                        <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                          console.cloud.google.com
-                        </a>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* TTS Engine Selection */}
             <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 card-hover">
               <h2 className="text-xl sm:text-2xl font-bold mb-6">TTS Engine</h2>
