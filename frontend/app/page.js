@@ -7,22 +7,37 @@ import { SiKick } from 'react-icons/si'
 import ElectronTTSManager from './components/ElectronTTSManager'
 
 export default function Home() {
+  // Load initial state from localStorage or use defaults
+  const loadFromLocalStorage = (key, defaultValue) => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch (e) {
+          console.error(`Error parsing localStorage key ${key}:`, e)
+        }
+      }
+    }
+    return defaultValue
+  }
+
   // Chat platform states (now stores usernames/identifiers instead of full URLs)
-  const [platforms, setPlatforms] = useState({
+  const [platforms, setPlatforms] = useState(() => loadFromLocalStorage('zabari_platforms', {
     twitch: { enabled: false, username: 'zabariyarin' },
     youtube: { enabled: false, videoId: 'zabariyarin' }, // Can be video ID or @username
     kick: { enabled: false, username: 'zabariyarin' },
     tiktok: { enabled: false, username: 'zabariyarin' }
-  })
+  }))
 
   // TTS engine selection
-  const [ttsEngine, setTtsEngine] = useState('webspeech') // 'webspeech' or 'kokoro'
+  const [ttsEngine, setTtsEngine] = useState(() => loadFromLocalStorage('zabari_ttsEngine', 'webspeech'))
 
   // Connection mode - always Playwright (with TikTok hybrid mode)
   const connectionMode = 'playwright'
 
   // TTS configuration
-  const [ttsConfig, setTtsConfig] = useState({
+  const [ttsConfig, setTtsConfig] = useState(() => loadFromLocalStorage('zabari_ttsConfig', {
     voice: '',
     autoDetectLanguage: false,
     englishVoice: '',
@@ -34,7 +49,7 @@ export default function Home() {
     excludeCommands: true,
     excludeLinks: true,
     excludeUsers: ['nightbot', 'moobot', 'streamelements', 'streamlabs', 'fossabot']
-  })
+  }))
 
   // Web Speech API voices
   const [availableVoices, setAvailableVoices] = useState([])
@@ -42,11 +57,11 @@ export default function Home() {
   const [hebrewVoices, setHebrewVoices] = useState([])
 
   // Kokoro specific config
-  const [kokoroConfig, setKokoroConfig] = useState({
+  const [kokoroConfig, setKokoroConfig] = useState(() => loadFromLocalStorage('zabari_kokoroConfig', {
     voice: 'af_heart',
     speed: 1.0,
     serverUrl: 'http://localhost:8766'
-  })
+  }))
 
   // App state
   const [isRunning, setIsRunning] = useState(false)
@@ -55,6 +70,31 @@ export default function Home() {
 
   // Track if user is at bottom (for smart auto-scroll)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+
+  // Save configuration to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zabari_platforms', JSON.stringify(platforms))
+    }
+  }, [platforms])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zabari_ttsEngine', JSON.stringify(ttsEngine))
+    }
+  }, [ttsEngine])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zabari_ttsConfig', JSON.stringify(ttsConfig))
+    }
+  }, [ttsConfig])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zabari_kokoroConfig', JSON.stringify(kokoroConfig))
+    }
+  }, [kokoroConfig])
 
   // Poll for messages - always active to show chat history
   useEffect(() => {
@@ -101,20 +141,28 @@ export default function Home() {
         setEnglishVoices(english)
         setHebrewVoices(hebrew)
 
-        // Set default voices if none selected
+        // Set default voices ONLY if none selected (empty string means not loaded from localStorage)
         if (voices.length > 0) {
-          if (!ttsConfig.voice) {
-            const defaultVoice = english[0] || voices[0]
-            if (defaultVoice) {
-              setTtsConfig(prev => ({ ...prev, voice: defaultVoice.name }))
+          setTtsConfig(prev => {
+            const updates = {}
+
+            // Only set defaults if current values are empty strings (not loaded from localStorage)
+            if (prev.voice === '') {
+              const defaultVoice = english[0] || voices[0]
+              if (defaultVoice) {
+                updates.voice = defaultVoice.name
+              }
             }
-          }
-          if (!ttsConfig.englishVoice && english.length > 0) {
-            setTtsConfig(prev => ({ ...prev, englishVoice: english[0].name }))
-          }
-          if (!ttsConfig.hebrewVoice && hebrew.length > 0) {
-            setTtsConfig(prev => ({ ...prev, hebrewVoice: hebrew[0].name }))
-          }
+            if (prev.englishVoice === '' && english.length > 0) {
+              updates.englishVoice = english[0].name
+            }
+            if (prev.hebrewVoice === '' && hebrew.length > 0) {
+              updates.hebrewVoice = hebrew[0].name
+            }
+
+            // Only update if there are changes
+            return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
+          })
         }
       }
 
