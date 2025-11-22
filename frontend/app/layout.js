@@ -1,6 +1,7 @@
 import './globals.css'
 import 'react-toastify/dist/ReactToastify.css'
 import { ToastContainer } from 'react-toastify'
+import UpdateNotification from './components/UpdateNotification'
 
 export const metadata = {
   title: 'Zabari TTS - Multi-Platform Chat Logger',
@@ -12,6 +13,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         {children}
+        <UpdateNotification />
         <ToastContainer
           position="bottom-right"
           autoClose={3000}

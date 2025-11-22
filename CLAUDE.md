@@ -315,3 +315,85 @@ To use TikTok chat monitoring, you must create a session file first:
   - Smooth fade-in animations
   - Dynamic configuration without code changes
   - Process management (start/stop chat logger)
+  - Auto-update notifications (production only)
+
+## Auto-Update System
+
+**NEW FEATURE**: Zabari TTS now supports automatic updates via GitHub Releases using electron-updater.
+
+### How It Works
+
+1. **Automatic Checking**: App checks for updates on startup and every 4 hours
+2. **User Notification**: Update notification appears in bottom-right corner when available
+3. **Background Download**: Updates download without interrupting user's work
+4. **Easy Installation**: One-click install and restart
+
+### For Developers
+
+**Creating Releases:**
+```bash
+# Quick method (recommended)
+npm run release:check    # Pre-release validation
+npm run release:patch    # Bug fixes:     1.0.0 → 1.0.1
+npm run release:minor    # New features:  1.0.0 → 1.1.0
+npm run release:major    # Breaking:      1.0.0 → 2.0.0
+npm run release:draft    # Create draft release
+```
+
+**First-Time Setup:**
+1. Update `package.json` → `build.publish[0].owner` with your GitHub username
+2. Create GitHub Personal Access Token with `repo` scope
+3. Set environment variable: `$env:GH_TOKEN="ghp_..."`
+4. Run: `npm run release:patch`
+
+**Documentation:**
+- **Quick Guide**: See `docs/RELEASE-GUIDE.md`
+- **Detailed Docs**: See `docs/AUTO-UPDATE.md`
+
+### Implementation Details
+
+**Key Files:**
+- `electron-main.js`: Auto-updater configuration and event handlers (lines 23-110)
+- `electron-preload.js`: Exposed updater API to renderer (lines 18-56)
+- `frontend/app/components/UpdateNotification.js`: Update UI component
+- `frontend/app/layout.js`: Includes UpdateNotification component
+- `scripts/release/create-release.js`: Automated release creation
+- `scripts/release/pre-release-checklist.js`: Pre-release validation
+
+**Auto-Updater Events:**
+- `checking-for-update`: App is checking GitHub for new releases
+- `update-available`: New version found (shows notification)
+- `update-not-available`: No updates found
+- `download-progress`: Download progress (percentage, speed)
+- `update-downloaded`: Ready to install (shows install button)
+- `error`: Update failed (shows error message)
+
+**Update Flow:**
+```
+[App Launch] → [Check GitHub Releases] → [Compare Versions]
+     ↓                                           ↓
+[No Update]                              [Update Available]
+     ↓                                           ↓
+[Check again in 4 hours]          [Show Notification] → [User Downloads]
+                                           ↓
+                                  [Download Complete] → [User Installs]
+                                           ↓
+                                  [App Restarts with New Version]
+```
+
+**Security:**
+- Updates verified via SHA-512 checksums (in `latest.yml`)
+- HTTPS downloads from GitHub
+- Code signing recommended for production (prevents "Unknown Publisher" warnings)
+
+**Configuration:**
+```javascript
+// electron-main.js
+autoUpdater.autoDownload = false;        // User controls download
+autoUpdater.autoInstallOnAppQuit = true; // Install when app quits
+```
+
+**Development Mode:**
+- Auto-updater is disabled in dev mode (`npm run electron:dev`)
+- Prevents accidental updates during development
+- Can be tested with local HTTP server (see docs)

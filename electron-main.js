@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 const TTSServerManager = require('./lib/tts-server-manager.js');
 const TTSDependencySetup = require('./lib/setup-tts-dependencies.js');
 
@@ -18,6 +19,95 @@ const isDev = !app.isPackaged;
 const resourcesPath = isDev
   ? path.join(__dirname)
   : process.resourcesPath;
+
+// ============================================================================
+// AUTO-UPDATER CONFIGURATION
+// ============================================================================
+
+// Configure auto-updater
+autoUpdater.autoDownload = false; // Manual download control
+autoUpdater.autoInstallOnAppQuit = true; // Install update when app quits
+
+// Disable auto-updater in development mode
+if (isDev) {
+  autoUpdater.updateConfigPath = null;
+  console.log('[Auto-Updater] Disabled in development mode');
+} else {
+  console.log('[Auto-Updater] Enabled');
+  console.log('[Auto-Updater] Current version:', app.getVersion());
+}
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  console.log('[Auto-Updater] Checking for updates...');
+  sendStatusToWindow('Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('[Auto-Updater] Update available:', info.version);
+  sendStatusToWindow(`Update available: ${info.version}`);
+
+  // Send notification to renderer process
+  if (mainWindow) {
+    mainWindow.webContents.send('update-available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes
+    });
+  }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('[Auto-Updater] No updates available. Current version:', info.version);
+  sendStatusToWindow('App is up to date');
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('[Auto-Updater] Error:', err);
+  sendStatusToWindow(`Update error: ${err.message}`);
+
+  if (mainWindow) {
+    mainWindow.webContents.send('update-error', {
+      message: err.message
+    });
+  }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`;
+  log_message += ` (${progressObj.transferred}/${progressObj.total})`;
+  console.log('[Auto-Updater]', log_message);
+  sendStatusToWindow(log_message);
+
+  // Send progress to renderer
+  if (mainWindow) {
+    mainWindow.webContents.send('update-download-progress', {
+      percent: progressObj.percent,
+      transferred: progressObj.transferred,
+      total: progressObj.total,
+      bytesPerSecond: progressObj.bytesPerSecond
+    });
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('[Auto-Updater] Update downloaded:', info.version);
+  sendStatusToWindow(`Update ${info.version} downloaded. Ready to install.`);
+
+  // Notify renderer that update is ready
+  if (mainWindow) {
+    mainWindow.webContents.send('update-downloaded', {
+      version: info.version
+    });
+  }
+});
+
+// Helper function to send status messages
+function sendStatusToWindow(text) {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', { message: text });
+  }
+}
 
 // Path to the frontend directory
 const frontendPath = isDev
@@ -307,6 +397,25 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
 
+  // Check for updates (only in production)
+  if (!isDev) {
+    console.log('[Auto-Updater] Checking for updates on startup...');
+    // Check for updates 5 seconds after app starts
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('[Auto-Updater] Failed to check for updates:', err);
+      });
+    }, 5000);
+
+    // Check for updates every 4 hours
+    setInterval(() => {
+      console.log('[Auto-Updater] Periodic update check...');
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('[Auto-Updater] Failed to check for updates:', err);
+      });
+    }, 4 * 60 * 60 * 1000);
+  }
+
   // Check if server is already running
   const alreadyRunning = await isServerRunning(NEXT_JS_URL);
   if (alreadyRunning) {
@@ -367,6 +476,84 @@ app.on('will-quit', () => {
 ipcMain.on('quit-app', () => {
   app.isQuitting = true;
   app.quit();
+});
+
+// ============================================================================
+// AUTO-UPDATER IPC HANDLERS
+// ============================================================================
+
+// Get current app version
+ipcMain.handle('app-get-version', () => {
+  return {
+    version: app.getVersion(),
+    isDev: isDev
+  };
+});
+
+// Check for updates manually
+ipcMain.handle('app-check-for-updates', async () => {
+  if (isDev) {
+    return {
+      success: false,
+      message: 'Updates are disabled in development mode'
+    };
+  }
+
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return {
+      success: true,
+      updateInfo: result?.updateInfo
+    };
+  } catch (error) {
+    console.error('[Auto-Updater] Check failed:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+});
+
+// Download update
+ipcMain.handle('app-download-update', async () => {
+  if (isDev) {
+    return {
+      success: false,
+      message: 'Updates are disabled in development mode'
+    };
+  }
+
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    console.error('[Auto-Updater] Download failed:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+});
+
+// Install update and restart
+ipcMain.handle('app-install-update', () => {
+  if (isDev) {
+    return {
+      success: false,
+      message: 'Updates are disabled in development mode'
+    };
+  }
+
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    return { success: true };
+  } catch (error) {
+    console.error('[Auto-Updater] Install failed:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
 });
 
 // TTS Server IPC handlers

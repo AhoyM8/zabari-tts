@@ -12,6 +12,14 @@
     "pack": "npm run build:frontend && npm run prepare:electron && electron-builder --dir",
     "dist": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64",
     "dist:portable": "npm run build:frontend && npm run prepare:electron && electron-builder --win portable",
+    "dist:all": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64",
+    "publish:github": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64 --publish always",
+    "draft:github": "npm run build:frontend && npm run prepare:electron && electron-builder --win --x64 --publish onTagOrDraft",
+    "release:check": "node scripts/release/pre-release-checklist.js",
+    "release:patch": "node scripts/release/create-release.js patch",
+    "release:minor": "node scripts/release/create-release.js minor",
+    "release:major": "node scripts/release/create-release.js major",
+    "release:draft": "node scripts/release/create-release.js patch --draft",
     "generate-icons": "node scripts/build/generate-icons-from-any.js",
     "tiktok:chat": "node scripts/tiktok-chat-beautiful.js",
     "c": "claude --permission-mode bypassPermissions"
@@ -30,6 +38,7 @@
   "dependencies": {
     "@playwright/test": "^1.56.0",
     "bufferutil": "^4.0.9",
+    "electron-updater": "^6.6.2",
     "playwright": "^1.56.0",
     "pusher-js": "^8.4.0",
     "tiktok-live-connector": "^2.1.0",
@@ -53,6 +62,14 @@
       "buildResources": "assets"
     },
     "asar": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AhoyM8",
+        "repo": "zabari-tts",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "electron-main.js",
       "electron-preload.js",
