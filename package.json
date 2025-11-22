@@ -1,6 +1,6 @@
 {
   "name": "zabari-tts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-platform chat logger with TTS for live streaming",
   "main": "electron-main.js",
   "scripts": {
