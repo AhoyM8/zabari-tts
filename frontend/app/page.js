@@ -53,10 +53,21 @@ export default function Home() {
   const [messages, setMessages] = useState([])
   const [status, setStatus] = useState('idle')
 
+  // Track if user is at bottom (for smart auto-scroll)
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+
   // Poll for messages - always active to show chat history
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
+        // Check if user is at bottom BEFORE fetching new messages
+        const container = document.getElementById('chat-container')
+        if (container) {
+          const threshold = 100 // px from bottom to still consider "at bottom"
+          const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+          setShouldAutoScroll(isAtBottom)
+        }
+
         const response = await fetch('/api/chat/messages')
         const data = await response.json()
         setMessages(data.messages)
@@ -69,13 +80,13 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [])
 
-  // Auto-scroll to bottom when new messages arrive
+  // Smart auto-scroll - only scroll to bottom if user was already at bottom
   useEffect(() => {
     const container = document.getElementById('chat-container')
-    if (container && messages.length > 0) {
+    if (container && messages.length > 0 && shouldAutoScroll) {
       container.scrollTop = container.scrollHeight
     }
-  }, [messages])
+  }, [messages, shouldAutoScroll])
 
   // Fetch available Web Speech API voices
   useEffect(() => {
